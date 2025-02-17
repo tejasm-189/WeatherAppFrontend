@@ -1,0 +1,354 @@
+﻿@page "/favorites"
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject ISnackbar SnackBar
+@inject SupabaseClient Supabase
+@using System.Text.Json;
+@using System.Net.Http.Json;
+@using System.Text;
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <!-- Add New Favorite City -->
+    <MudPaper Elevation="0" Class="search-container mb-6">
+        <MudGrid>
+            <MudItem xs="12" md="8" Class="d-flex">
+                <MudTextField @bind-Value="newCity" 
+                            Placeholder="Add a city to favorites..." 
+                            Variant="Variant.Outlined"
+                            Class="flex-grow-1"
+                            Adornment="Adornment.Start"
+                            AdornmentIcon="@Icons.Material.Filled.LocationCity" />
+                <MudButton Color="Color.Primary" 
+                          OnClick="AddFavoriteCity" 
+                          Class="ml-2 px-6"
+                          Variant="Variant.Filled">
+                    Add
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">@errorMessage</MudAlert>
+    }
+
+    <!-- Display Favorite Cities -->
+    <MudGrid Spacing="4">
+        @foreach (var city in favoriteCities)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper @onclick="@(() => NavigateToDashboard(city.Name))" 
+                         Class="weather-card pa-6 cursor-pointer">
+                    <MudGrid>
+                        <MudItem xs="12">
+                            <div class="d-flex justify-space-between align-center">
+                                <MudText Typo="Typo.h5">@city.Name</MudText>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                             Color="Color.Error" 
+                                             OnClick="@(() => RemoveFromFavorites(city.Name))"
+                                             Class="delete-button" />
+                            </div>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <div class="d-flex align-center mt-2">
+                                <MudIcon Icon="@city.Icon" Size="Size.Large" Class="mr-4" />
+                                <div>
+                                    <MudText Typo="Typo.h4">@Math.Round(city.Temperature - 273.15, 1)°C</MudText>
+                                    <MudText Typo="Typo.body1" Style="text-transform: capitalize;">
+                                        @city.Description
+                                    </MudText>
+                                </div>
+                            </div>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudCard Icon="@Icons.Material.Filled.WaterDrop" 
+                                           Title="Humidity" 
+                                           Value="@($"{city.Humidity}%")" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudCard Icon="@Icons.Material.Filled.Air" 
+                                           Title="Wind" 
+                                           Value="@($"{city.WindSpeed:F1} km/h")" />
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+</MudContainer>
+
+@* Weather Info Card Component *@
+<MudCard>
+    @code {
+        [Parameter] public string Icon { get; set; }
+        [Parameter] public string Title { get; set; }
+        [Parameter] public string Value { get; set; }
+
+        private RenderFragment WeatherInfoCard() =>@<div class="weather-info-card">
+            <MudIcon Icon="@Icon" Color="Color.Primary" />
+            <MudText Typo="Typo.caption">@Title</MudText>
+            <MudText Typo="Typo.body1">@Value</MudText>
+        </div>;
+    }
+</MudCard>
+
+<style>
+    .search-container {
+        background: rgba(var(--mud-palette-primary-rgb), 0.03);
+        border-radius: 12px;
+        padding: 24px;
+    }
+
+    .weather-card {
+        background: linear-gradient(135deg, rgb(100, 181, 246) 0%, rgb(30, 136, 229) 100%);
+        color: white;
+        border-radius: 12px;
+        transition: transform 0.2s ease-in-out;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .weather-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .weather-info-card {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+        height: 100%;
+    }
+
+    .delete-button {
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
+
+    .weather-card:hover .delete-button {
+        opacity: 1;
+    }
+
+    ::deep .mud-input {
+        background-color: var(--mud-palette-surface);
+        border-radius: 8px;
+    }
+
+    ::deep .mud-input-outlined {
+        border: none;
+    }
+</style>
+
+@code {
+    private string newCity = "";
+    private string errorMessage = "";
+    private List<CityWeather> favoriteCities = new();
+
+    private string apiBase = "https://localhost:7281/api";
+    private string? userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var client = Supabase.GetClient();
+        if (client.Auth.CurrentUser == null)
+        {
+            NavigationManager.NavigateTo("/login", true);
+        }
+        else
+        {
+            userId = client.Auth.CurrentUser.Id; // Retrieve the authenticated user's id
+        }
+
+        await LoadFavoriteCities();
+    }
+
+    private async Task LoadFavoriteCities()
+    {
+        try
+        {
+            favoriteCities.Clear();
+
+            var storedCities = await Http.GetFromJsonAsync<List<FavoriteCity>>($"{apiBase}/favorites/{userId}");
+            if (storedCities == null || !storedCities.Any())
+            {
+                errorMessage = "No favorite cities found.";
+                return;
+            }
+
+            foreach (var city in storedCities)
+            {
+                var cityWeather = await FetchWeatherData(city.City);
+                if (cityWeather != null)
+                {
+                    favoriteCities.Add(cityWeather);
+                }
+            }
+
+            StateHasChanged(); // ✅ Ensure UI updates after data is fetched
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error loading favorite cities: " + ex.Message;
+            Console.WriteLine(errorMessage);
+        }
+    }
+
+    private async Task AddFavoriteCity()
+    {
+        errorMessage = "";
+
+        // Check if city is already added
+        if (favoriteCities.Any(c => c.Name.Equals(newCity, StringComparison.OrdinalIgnoreCase)))
+        {
+            SnackBar.Add("City is already in your favorites", Severity.Warning);
+            return;
+        }
+
+        // Validate city using backend
+        var cityWeather = await FetchWeatherData(newCity);
+        if (cityWeather == null)
+        {
+            SnackBar.Add("Invalid city name. Please enter a valid city.", Severity.Warning);
+            return;
+        }
+
+        // Add to MongoDB
+        var favorite = new FavoriteCity { UserId = userId, City = newCity };
+        var response = await Http.PostAsJsonAsync($"{apiBase}/favorites", favorite);
+
+        if (response.IsSuccessStatusCode)
+        {
+            favoriteCities.Add(cityWeather); // ✅ Only add if MongoDB insertion is successful
+            newCity = "";
+            SnackBar.Add("City added to favorites!", Severity.Success);
+        }
+        else
+        {
+            SnackBar.Add("Failed to add city to favorites.", Severity.Error);
+        }
+    }
+
+    private void NavigateToDashboard(string cityName)
+    {
+        NavigationManager.NavigateTo($"/dashboard?city={Uri.EscapeDataString(cityName)}");
+    }
+
+    private async Task<CityWeather?> FetchWeatherData(string cityName)
+    {
+        string weatherUrl = $"{apiBase}/weather/{cityName}";
+
+        try
+        {
+            var weatherResult = await Http.GetFromJsonAsync<WeatherForecast>(weatherUrl);
+            if (weatherResult != null && weatherResult.List.Any())
+            {
+                var latestWeather = weatherResult.List.First();
+                return new CityWeather
+                {
+                    Name = cityName,
+                    Temperature = latestWeather.Main.Temp,
+                    Description = latestWeather.Weather[0].Description,
+                    Humidity = latestWeather.Main.Humidity,
+                    Icon = ConvertToMudBlazorIcon(latestWeather.Weather[0].Icon)
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching weather for {cityName}: {ex.Message}");
+        }
+
+        return null;
+    }
+
+    private string ConvertToMudBlazorIcon(string openWeatherIcon)
+    {
+        return openWeatherIcon switch
+        {
+            "01d" or "01n" => Icons.Material.Filled.WbSunny,
+            "02d" or "02n" => Icons.Material.Filled.Cloud,
+            "03d" or "03n" => Icons.Material.Filled.CloudQueue,
+            "04d" or "04n" => Icons.Material.Filled.CloudQueue,
+            "09d" or "09n" => Icons.Material.Filled.Umbrella,
+            "10d" or "10n" => Icons.Material.Filled.Grain,
+            "11d" or "11n" => Icons.Material.Filled.Bolt,
+            "13d" or "13n" => Icons.Material.Filled.AcUnit,
+            "50d" or "50n" => Icons.Material.Filled.Visibility,
+            _ => Icons.Material.Filled.Help
+        };
+    }
+
+    private async Task RemoveFromFavorites(string cityName)
+    {
+        await RemoveFromFavoritesImpl(cityName);
+    }
+
+    private async Task RemoveFromFavoritesImpl(string cityName)
+    {
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Delete, $"{apiBase}/favorites")
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(new { UserId = userId, City = cityName }),
+                                                Encoding.UTF8, "application/json")
+                };
+
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                favoriteCities.RemoveAll(c => c.Name == cityName);
+                SnackBar.Add("City removed from favorites!", Severity.Success);
+            }
+            else
+            {
+                SnackBar.Add("Failed to remove city from favorites.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            SnackBar.Add($"Error removing city: {ex.Message}", Severity.Error);
+        }
+    }
+
+    class CityWeather
+    {
+        public string? Name { get; set; }
+        public float Temperature { get; set; }
+        public string? Description { get; set; }
+        public string? Icon { get; set; }
+        public int Humidity { get; set; }
+        public float WindSpeed { get; set; }
+    }
+
+    class FavoriteCity
+    {
+        public string? UserId { get; set; }
+        public string? City { get; set; }
+    }
+
+    class WeatherForecast
+    {
+        public List<WeatherItem>? List { get; set; }
+    }
+
+    class WeatherItem
+    {
+        public MainInfo? Main { get; set; }
+        public List<WeatherInfo>? Weather { get; set; }
+    }
+
+    class WeatherInfo
+    {
+        public string? Description { get; set; }
+        public string? Icon { get; set; }
+    }
+
+    class MainInfo
+    {
+        public float Temp { get; set; }
+        public int Humidity { get; set; }
+    }
+}

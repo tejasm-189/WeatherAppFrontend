@@ -1,0 +1,89 @@
+﻿@page "/about"
+@using MudBlazor
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="about-container pt-1 px-2">
+    <!-- Hero and Welcome Section -->
+    <MudPaper Class="hero-banner pa-3" 
+              Style="background: linear-gradient(135deg, rgb(100, 181, 246) 0%, rgb(30, 136, 229) 100%);">
+        <MudText Typo="Typo.h4" Class="text-center white-text">About Weather App</MudText>
+    </MudPaper>
+
+    <!-- Welcome Card -->
+    <MudCard Class="mt-2 pa-2">
+        <MudText Typo="Typo.h6" Class="mb-2">Weather Forecasting Made Simple</MudText>
+        <MudText Typo="Typo.body1">
+            Experience precise weather forecasting with our modern weather application. Get detailed weather information including temperature, humidity, wind speed, and precipitation forecasts. Whether you're planning your day or checking the week ahead, we provide accurate, real-time weather data powered by the OpenWeather API.
+        </MudText>
+    </MudCard>
+
+    <!-- Features Section -->
+    <MudGrid Class="mt-2" Spacing="2">
+        <MudItem xs="12" md="6">
+            <MudCard Class="pa-3">
+                <MudText Typo="Typo.h6" Class="mb-2">Features</MudText>
+                <MudList T="string" Dense="true" Clickable="true" DisablePadding="true">
+                    <MudListItem Text="Real-time Weather Updates" Icon="@Icons.Material.Filled.Public" IconColor="Color.Primary" />
+                    <MudListItem Text="5-Day Weather Forecast" Icon="@Icons.Material.Filled.DateRange" IconColor="Color.Primary" />
+                    <MudListItem Text="Interactive Weather Charts" Icon="@Icons.Material.Filled.BarChart" IconColor="Color.Primary" />
+                    <MudListItem Text="Temperature & Humidity Tracking" Icon="@Icons.Material.Filled.DeviceThermostat" IconColor="Color.Primary" />
+                    <MudListItem Text="Wind & Precipitation Forecasts" Icon="@Icons.Material.Filled.Air" IconColor="Color.Primary" />
+                    <MudListItem Text="Favorite Cities Management" Icon="@Icons.Material.Filled.Favorite" IconColor="Color.Primary" />
+                </MudList>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudCard Class="pa-3">
+                <MudText Typo="Typo.h6" Class="mb-2">Built With Modern Tech</MudText>
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                    <MudChip T="string" Color="Color.Primary">Blazor WebAssembly</MudChip>
+                    <MudChip T="string" Color="Color.Primary">.NET 8</MudChip>
+                    <MudChip T="string" Color="Color.Primary">MudBlazor</MudChip>
+                    <MudChip T="string" Color="Color.Primary">OpenWeather API</MudChip>
+                    <MudChip T="string" Color="Color.Primary">Chart.js</MudChip>
+                    <MudChip T="string" Color="Color.Primary">REST APIs</MudChip>
+                </MudStack>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Additional Information -->
+    <MudCard Class="mt-3 pa-3">
+        <MudText Typo="Typo.h6" Class="mb-2">Data Sources</MudText>
+        <MudText Typo="Typo.body2">
+            Weather data is provided by OpenWeather API, offering comprehensive meteorological data including temperature, 
+            humidity, wind conditions, and precipitation forecasts. Updates are received in real-time to ensure accuracy 
+            and reliability of weather information.
+        </MudText>
+    </MudCard>
+
+    <!-- Footer -->
+    <MudPaper Class="mt-3 text-center pa-2">
+        <MudButton Color="Color.Primary" 
+                   Variant="Variant.Filled" 
+                   Href="/" 
+                   StartIcon="@Icons.Material.Filled.Home">
+            Return to Dashboard
+        </MudButton>
+    </MudPaper>
+</MudContainer>
+
+<style>
+    .hero-banner {
+        border-radius: 12px;
+        margin-bottom: 8px;
+        min-height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    .white-text {
+        color: white;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    .about-container {
+        height: 100vh;
+        overflow: hidden;
+        padding-top: 4px;
+    }
+</style>

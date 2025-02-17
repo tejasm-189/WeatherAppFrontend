@@ -1,0 +1,26 @@
+# Stage 1: Build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# Copy the project file and restore dependencies
+COPY ["WeatherApp.csproj", "./"]
+RUN dotnet restore "./WeatherApp.csproj"
+
+# Copy the remaining source code
+COPY . .
+
+# Publish the app in Release mode to the /app/publish directory
+RUN dotnet publish "WeatherApp.csproj" -c Release -o /app/publish
+
+# Stage 2: Run
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+
+# Copy the published output from the build stage
+COPY --from=build /app/publish .
+
+# Expose port 80 (this is the default for ASP.NET Core)
+EXPOSE 80
+
+# Define the entry point for the container
+ENTRYPOINT ["dotnet", "WeatherApp.dll"] 

@@ -1,0 +1,115 @@
+﻿@page "/weather"
+@inject NavigationManager Nav
+@inject SupabaseClient supabase
+@inject HttpClient Http
+
+@if (!isAuthenticated)
+{
+    <MudContainer>
+        <MudPaper Elevation="4" Class="p-4">
+            <MudText Typo="Typo.h4" GutterBottom>You must be logged in to access this page.</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GoToLogin">Login</MudButton>
+        </MudPaper>
+    </MudContainer>
+}
+else
+{
+    <MudContainer>
+        <MudPaper Elevation="4" Class="p-4">
+            <MudText Typo="Typo.h4" GutterBottom>Welcome, @userEmail</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="Logout">Logout</MudButton>
+
+            <MudTextField @bind-Value="city" Label="Enter city name" Adornment="Adornment.Start" AdornmentIcon="mdi-map-marker" Margin="Margin.Dense" Class="mt-4" />
+            <MudButton OnClick="FetchWeather" Variant="Variant.Filled" Color="Color.Primary" Class="ml-2">Get Weather</MudButton>
+
+            @if (isLoading)
+            {
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+            }
+            else if (weatherData!= null)
+            {
+                <MudCard Class="mt-4">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h5">@weatherData?.City.Name, @weatherData?.City.Country</MudText>
+                        <MudText Typo="Typo.body1">🌡 @weatherData?.List[0].Main.Temp°C (Feels like: @weatherData?.List[0].Main.FeelsLike°C)</MudText>
+                        <MudText Typo="Typo.body2">💧 Humidity: @weatherData?.List[0].Main.Humidity% | 🌬 Pressure: @weatherData?.List[0].Main.Pressure hPa</MudText>
+                        <MudText Typo="Typo.body2">💨 Wind Speed: @weatherData?.List[0].Wind.Speed m/s | Direction: @weatherData?.List[0].Wind.Deg°</MudText>
+                        @if (weatherData.List?.Count > 0)
+                        {
+                            <MudText Typo="Typo.h6">Condition: @weatherData.List[0].Weather[0].Main - @weatherData.List[0].Weather[0].Description</MudText>
+                            <MudImage Src="@GetWeatherIcon(weatherData.List[0].Weather[0].Icon)" Width="100" Class="mt-2" />
+                        }
+                    </MudCardContent>
+                </MudCard>
+            }
+            else if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-4">@errorMessage</MudAlert>
+            }
+        </MudPaper>
+    </MudContainer>
+}
+
+@code {
+    private bool isAuthenticated = false;
+    private string? userEmail;
+    private WeatherForecast? weatherData;
+    private string? errorMessage;
+    private string city = "Bengaluru";
+    private bool isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var client = supabase.GetClient();
+        var sessionResponse = client.Auth.CurrentSession;
+        var userResponse = client.Auth.CurrentUser;
+        if (sessionResponse?.User != null)
+        {
+            isAuthenticated = true;
+            userEmail = sessionResponse.User.Email;
+            await FetchWeather();
+        }
+        else
+        {
+            isAuthenticated = false;
+        }
+    }
+
+    private async Task FetchWeather()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            string api = "https://localhost:7281/api";
+            weatherData = await Http.GetFromJsonAsync<WeatherForecast>($"{api}/weather/{city}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error fetching weather: " + ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+    private async Task Logout()
+    {
+        var client = supabase.GetClient();
+        await client.Auth.SignOut();
+        isAuthenticated = false;
+        Nav.NavigateTo("/login");
+    }
+
+  
+    private void GoToLogin()
+    {
+        Nav.NavigateTo("/login");
+    }
+
+    private string GetWeatherIcon(string iconCode)
+    {
+        return $"https://openweathermap.org/img/wn/{iconCode}@2x.png";
+    }
+}

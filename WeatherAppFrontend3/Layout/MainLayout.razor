@@ -1,0 +1,104 @@
+﻿@inject SupabaseClient supabase  
+@inject NavigationManager NavigationManager  
+@inject IPreferenceService PreferenceService
+@inherits LayoutComponentBase
+@* Required *@
+<MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<MudLayout>  
+
+   <MudAppBar Color="Color.Primary">  
+       <MudText Typo="Typo.h5" Class="ml-2">WeatherApp</MudText>  
+       <MudSpacer />  
+
+       <!-- Dark Mode Toggle Button -->
+       <MudTooltip Text="Toggle Dark Mode">
+           <MudIconButton Icon="@Icons.Material.Filled.DarkMode" 
+                          Color="Color.Inherit" 
+                          Edge="Edge.End" 
+                          OnClick="ToggleDarkMode" />
+       </MudTooltip>
+
+       @if (isAuthenticated)  
+       {  
+           <MudTooltip Text="Logout">  
+               <MudIconButton Icon="@Icons.Material.Filled.Logout" Edge="Edge.End" Style="color:#e2e1ebff;" OnClick="@Logout" />  
+           </MudTooltip>  
+
+       }  
+       else  
+       {  
+           <MudTooltip Text="Sign Up / Login">  
+               <MudIconButton Icon="@Icons.Material.Filled.Login" Edge="Edge.End" Style="color:#e2e1ebff;" OnClick="@Login" />  
+           </MudTooltip>  
+       }  
+
+   </MudAppBar>
+    <MudDrawerContainer Style="height: calc(100vh - 64px); margin-top: 64px; position: relative;">
+
+        <!-- Sidebar Navigation -->
+        <MudDrawer @bind-Open="@_open" Fixed="true" Elevation="1" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true" Class="gradient-drawer">
+            <MudNavMenu Class="mud-nav-menu-center">
+                <MudNavLink Match="NavLinkMatch.All" Href="/home" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
+                <MudNavLink Match="NavLinkMatch.All" Href="/dashboard" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+                <MudNavLink Match="NavLinkMatch.All" Href="/favorites" Icon="@Icons.Material.Filled.Favorite">Favorites</MudNavLink>
+
+            </MudNavMenu>
+            <MudSpacer />
+
+            <MudNavMenu>
+                <MudNavLink Href="/about" Icon="@Icons.Material.Filled.Info">About</MudNavLink>
+                <MudNavLink Href="/contact" Icon="@Icons.Material.Filled.ContactSupport">Contact</MudNavLink>
+                <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+            </MudNavMenu>
+        </MudDrawer>
+
+        <!-- Main Content Area -->  
+       <MudMainContent Style="margin-left: 56px; height: calc(100vh - 64px); padding-top: 0;">  
+           <MudContainer MaxWidth="MaxWidth.ExtraLarge" Style="flex-grow:1; display: flex; flex-direction: column; height: 100%; padding-top: 0;">  
+               @Body  
+           </MudContainer>  
+       </MudMainContent>  
+   </MudDrawerContainer>  
+</MudLayout>  
+
+@code {  
+   private bool _open = false;  
+   private bool _isDarkMode = false;  
+
+   private bool isAuthenticated = false;  
+
+   protected override async Task OnInitializedAsync()  
+   {  
+       var client = supabase.GetClient();  
+       var sessionResponse = client.Auth.CurrentSession;  
+       var userResponse = client.Auth.CurrentUser;  
+
+       isAuthenticated = sessionResponse?.User != null;  
+
+       // Load dark mode preference  
+       _isDarkMode = await PreferenceService.GetDarkModePreference();  
+   }  
+
+   private async Task ToggleDarkMode()  
+   {  
+       _isDarkMode = !_isDarkMode;  
+       await PreferenceService.SetDarkModePreference(_isDarkMode);  
+   }  
+
+   private async Task Logout()  
+   {  
+       var client = supabase.GetClient();  
+       await client.Auth.SignOut();  
+       isAuthenticated = false;  
+       NavigationManager.NavigateTo("/root");  
+   }  
+
+   private void Login()  
+   {  
+       NavigationManager.NavigateTo("/login");  
+   }  
+}

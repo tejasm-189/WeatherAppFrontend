@@ -1,0 +1,1169 @@
+﻿@page "/dashboard"
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@using MudBlazor.Charts
+@using System.Text.Json.Serialization
+@using System.Linq
+@inject SupabaseClient Supabase
+@inject ISnackbar SnackBar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="dashboard-container pa-2">
+    <!-- Search Section -->
+    <MudPaper Elevation="0" Class="search-container mb-4">
+        <div class="d-flex align-center" style="width:100%;">
+            <MudTextField @bind-Value="searchQuery" 
+                          Placeholder="Search city..." 
+                          Variant="Variant.Outlined"
+                          Style="max-width:400px;" 
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" />
+            <div class="ml-auto d-flex align-center">
+                <MudButton Color="Color.Primary" 
+                          OnClick="SearchWeather" 
+                          Class="mr-2 px-6"
+                          Variant="Variant.Filled">
+                    Search
+                </MudButton>
+                <MudButton Color="Color.Secondary"
+                          OnClick="AddToFavorites"
+                          Class="px-6"
+                          Variant="Variant.Filled"
+                          StartIcon="@Icons.Material.Filled.Favorite">
+                    Add to Favorites
+                </MudButton>
+            </div>
+        </div>
+    </MudPaper>
+
+    <MudGrid Spacing="4">
+        <!-- Main Weather Card -->
+        <MudItem xs="12" md="4">
+            <MudPaper Class="main-weather-card pa-6 h-100" Elevation="0">
+                <MudStack>
+                    <MudText Typo="Typo.h4">@currentWeather?.CityName</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-4">@DateTime.Now.ToString("dddd, MMMM dd, yyyy")</MudText>
+                    <div class="d-flex align-center">
+                        <MudIcon Icon="@ConvertToMudBlazorIcon(currentWeather?.WeatherIcon ?? "")" 
+                                Size="Size.Large" 
+                                Class="mr-4" />
+                        <div>
+                            <MudText Typo="Typo.h2">@(Math.Round(currentWeather?.Temperature ?? 0))°C</MudText>
+                            <MudText Typo="Typo.body1" Style="text-transform: capitalize;">
+                                @currentWeather?.Description
+                            </MudText>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <MudText Typo="Typo.subtitle1">Humidity: @currentWeather?.Humidity%</MudText>
+                        <MudText Typo="Typo.subtitle1">Pressure: @currentWeather?.Pressure hPa</MudText>
+                    </div>
+                    <div class="d-flex justify-content-between mt-1">
+                        <MudText Typo="Typo.subtitle1">Wind Speed: @currentWeather?.WindSpeed km/h</MudText>
+                        <MudText Typo="Typo.subtitle1">Visibility: @currentWeather?.Visibility m</MudText>
+                    </div>
+
+                    <MudDivider Class="my-4" />
+                    <MudText Typo="Typo.h6" Class="mb-4">@selectedForecastTitle</MudText>
+                    @if (_todayForecastLabels.Length > 0)
+                    {
+                        <MudText Typo="Typo.h5" Class="mb-2">
+                            @($" { _todayForecastSeries[0].Data[_todayForecastIndex] }°C")
+                        </MudText>
+                        <MudSlider @bind-Value="_todayForecastIndex"
+                                   Color="Color.Primary"
+                                   Min="0"
+                                   Max="@( _todayForecastLabels.Length - 1 )"
+                                   Step="1"
+                                   TickMarks="true"
+                                   TickMarkLabels="@_todayForecastLabels"
+                                   Class="mt-2 forecast-slider" />
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Warning">No hourly forecast available.</MudAlert>
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Weather Charts Carousel -->
+        <MudItem xs="12" md="8">
+            <MudPaper Class="forecast-carousel pa-4 h-100" Elevation="0">
+                <MudCarousel @bind-ActiveIndex="ActiveCarouselIndex" 
+                             Class="mud-width-full" 
+                             Style="height:420px;"
+                             ShowArrows="true" 
+                             ShowBullets="true" 
+                             EnableSwipeGesture="true" 
+                             AutoCycle="false" 
+                             TData="object">
+                    <!-- Temperature Chart -->
+                    <MudCarouselItem Transition="Transition.Slide">
+                        <div class="d-flex flex-column chart-container">
+                            <MudText Typo="Typo.h6" Class="mb-4 text-center">Temperature Forecast</MudText>
+                            @if (_temperatureSeries == null)
+                            {
+                                <MudAlert Severity="Severity.Warning">Temperature series is null</MudAlert>
+                            }
+                            else if (!_temperatureSeries.Any())
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Temperature series is empty. 
+                                    Debug: @(DateTime.Now.ToString("HH:mm:ss.fff"))
+                                </MudAlert>
+                            }
+                            else if (_temperatureSeries.Any(s => s.Data == null))
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Series data is null.
+                                    Series count: @_temperatureSeries.Count
+                                </MudAlert>
+                            }
+                            else if (_temperatureSeries.Any(s => s.Data.Length == 0))
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Series has zero points.
+                                    Series count: @_temperatureSeries.Count
+                                    Data lengths: @string.Join(", ", _temperatureSeries.Select(s => s.Data.Length))
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudChart ChartType="ChartType.Line" 
+                                         ChartSeries="@_temperatureSeries"
+                                         XAxisLabels="@_dateLabels"
+                                         Width="100%"
+                                         Height="300px"
+                                         ChartOptions="@_tempChartOptions" />
+                            }
+                        </div>
+                    </MudCarouselItem>
+
+                    <!-- Humidity Chart -->
+                    <MudCarouselItem Transition="Transition.Slide">
+                        <div class="d-flex flex-column chart-container">
+                            <MudText Typo="Typo.h6" Class="mb-4 text-center">Daily Humidity Forecast</MudText>
+                            @if (_humidityDailySeries == null)
+                            {
+                                <MudAlert Severity="Severity.Warning">Humidity series is null</MudAlert>
+                            }
+                            else if (!_humidityDailySeries.Any())
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Humidity series is empty.
+                                    Debug: @(DateTime.Now.ToString("HH:mm:ss.fff"))
+                                </MudAlert>
+                            }
+                            else if (_humidityDailySeries.Any(s => s.Data == null))
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Humidity series data is null.
+                                    Series count: @_humidityDailySeries.Count
+                                </MudAlert>
+                            }
+                            else if (_humidityDailySeries.Any(s => s.Data.Length == 0))
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Humidity series has zero points.
+                                    Series count: @_humidityDailySeries.Count
+                                    Data lengths: @string.Join(", ", _humidityDailySeries.Select(s => s.Data.Length))
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudChart ChartType="ChartType.Line"
+                                          ChartSeries="@_humidityDailySeries"
+                                          XAxisLabels="@_humidityDailyLabels"
+                                          Width="100%"
+                                          Height="300px"
+                                          ChartOptions="@_humidityChartOptions" />
+                            }
+                        </div>
+                    </MudCarouselItem>
+
+                    <!-- Precipitation Chart -->
+                    <MudCarouselItem Transition="Transition.Slide">
+                        <div class="d-flex flex-column chart-container">
+                            <MudText Typo="Typo.h6" Class="mb-4 text-center">Daily Precipitation Total</MudText>
+                            @if (_precipitationDailySeries == null)
+                            {
+                                <MudAlert Severity="Severity.Warning">Precipitation series is null</MudAlert>
+                            }
+                            else if (!_precipitationDailySeries.Any())
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Precipitation series is empty.
+                                    Debug: @(DateTime.Now.ToString("HH:mm:ss.fff"))
+                                </MudAlert>
+                            }
+                            else if (_precipitationDailySeries.Any(s => s.Data == null))
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Precipitation series data is null.
+                                    Series count: @_precipitationDailySeries.Count
+                                </MudAlert>
+                            }
+                            else if (_precipitationDailySeries.Any(s => s.Data.Length == 0))
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Precipitation series has zero points.
+                                    Series count: @_precipitationDailySeries.Count
+                                    Data lengths: @string.Join(", ", _precipitationDailySeries.Select(s => s.Data.Length))
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudChart ChartType="ChartType.Bar"
+                                          ChartSeries="@_precipitationDailySeries"
+                                          XAxisLabels="@_precipitationDailyLabels"
+                                          Width="100%"
+                                          Height="300px"
+                                          ChartOptions="@_precipitationChartOptions" />
+                            }
+                        </div>
+                    </MudCarouselItem>
+
+                    <!-- Daily Wind Forecast Chart -->
+                    <MudCarouselItem Transition="Transition.Slide">
+                        <div class="d-flex flex-column chart-container">
+                            <MudText Typo="Typo.h6" Class="mb-4 text-center">Daily Wind Forecast</MudText>
+                            @if (_windDailySeries == null)
+                            {
+                                <MudAlert Severity="Severity.Warning">Wind series is null</MudAlert>
+                            }
+                            else if (!_windDailySeries.Any())
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Wind series is empty.
+                                    Debug: @(DateTime.Now.ToString("HH:mm:ss.fff"))
+                                </MudAlert>
+                            }
+                            else if (_windDailySeries.Any(s => s.Data == null))
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Wind series data is null.
+                                    Series count: @_windDailySeries.Count
+                                </MudAlert>
+                            }
+                            else if (_windDailySeries.Any(s => s.Data.Length == 0))
+                            {
+                                <MudAlert Severity="Severity.Warning">
+                                    Wind series has zero points.
+                                    Series count: @_windDailySeries.Count
+                                    Data lengths: @string.Join(", ", _windDailySeries.Select(s => s.Data.Length))
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudChart ChartType="ChartType.Line"
+                                          ChartSeries="@_windDailySeries"
+                                          XAxisLabels="@_windDailyLabels"
+                                          Width="100%"
+                                          Height="300px"
+                                          ChartOptions="@_windChartOptions" />
+                            }
+                        </div>
+                    </MudCarouselItem>
+                </MudCarousel>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? City { get; set; }
+
+    private string searchQuery = "New York";
+    private List<ForecastWeather> forecastData = new();
+    private CurrentWeather? currentWeather;
+    private List<ChartSeries> _temperatureSeries = new();
+    private List<ChartSeries> _precipitationSeries = new();
+    private List<ChartSeries> _humiditySeries = new();
+    private List<ChartSeries> _windSeries = new();
+    private string[] _dateLabels = new string[5];
+    private string userId = "user123"; // Replace with actual user authentication ID
+    private string apiBase = "https://localhost:7281/api";
+    [Inject] private ISnackbar Snackbar { get; set; }
+
+    // New variables for today's 3-hourly forecast
+    private List<ChartSeries> _todayForecastSeries = new();
+    private string[] _todayForecastLabels = new string[0];
+    private int _todayForecastIndex = 0;
+
+    // Update chart options with correct interpolation
+    private ChartOptions _tempChartOptions = new ChartOptions
+    {
+        YAxisTicks = 7,
+        InterpolationOption = InterpolationOption.NaturalSpline,
+        YAxisFormat = "0.0°C",
+        XAxisLines = true,
+        YAxisLines = true
+    };
+
+    private ChartOptions _humidityChartOptions = new ChartOptions
+    {
+        YAxisTicks = 5,
+        InterpolationOption = InterpolationOption.NaturalSpline,
+        YAxisFormat = "0'%'"
+    };
+
+    private ChartOptions _precipitationChartOptions = new ChartOptions
+    {
+        YAxisTicks = 5,
+        YAxisFormat = "0.0'mm'"
+    };
+
+    private ChartOptions _windChartOptions = new ChartOptions
+    {
+        YAxisTicks = 5,
+        InterpolationOption = InterpolationOption.NaturalSpline,
+        YAxisFormat = "0.0'km/h'"
+    };
+
+    // Variables to store the humidity series and labels for the chart
+    private List<ChartSeries> _humidityDailySeries = new();
+    private string[] _humidityDailyLabels = new string[0];
+
+    // Variables to store daily precipitation totals and labels for the chart
+    private List<ChartSeries> _precipitationDailySeries = new();
+    private string[] _precipitationDailyLabels = new string[0];
+
+    // New variables for daily wind forecast
+    private List<ChartSeries> _windDailySeries = new();
+    private string[] _windDailyLabels = new string[0];
+
+    // New variable for the main weather card title
+    private string selectedForecastTitle = "Today's Temperature Forecast";
+
+    private int activeCarouselIndex;
+
+    // Property for two-way binding; updates forecast title when set.
+    private int ActiveCarouselIndex
+    {
+        get => activeCarouselIndex;
+        set
+        {
+            activeCarouselIndex = value;
+            // Remove the condition so it always updates for debugging
+            switch (activeCarouselIndex)
+            {
+                case 0:
+                    selectedForecastTitle = "Today's Temperature Forecast";
+                    break;
+                case 1:
+                    selectedForecastTitle = "Today's Humidity Forecast";
+                    break;
+                case 2:
+                    selectedForecastTitle = "Today's Precipitation Forecast";
+                    break;
+                case 3:
+                    selectedForecastTitle = "Today's Wind Forecast";
+                    break;
+                default:
+                    selectedForecastTitle = "Today's Forecast";
+                    break;
+            }
+            Console.WriteLine($"Always Update -> ActiveCarouselIndex: {activeCarouselIndex}, Title: {selectedForecastTitle}");
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var client = Supabase.GetClient();
+        if (client.Auth.CurrentUser == null)
+        {
+            NavigationManager.NavigateTo("/login", true);
+        }
+
+        if (!string.IsNullOrEmpty(City))
+        {
+            searchQuery = City;
+        }
+        await FetchWeatherData();
+    }
+
+    private async Task SearchWeather()
+    {
+        await FetchWeatherData();
+    }
+
+    private async Task FetchWeatherData()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<WeatherApiResponse>($"https://localhost:7281/api/weather/{searchQuery}");
+            if (response != null && response.List.Any())
+            {
+                // Debug: Log the number of items received
+                Console.WriteLine($"Received {response.List.Count} forecast items");
+                
+                var current = response.List.First();
+                currentWeather = new CurrentWeather
+                {
+                    CityName = response.City.Name,
+                    CountryCode = response.City.Country,
+                    Temperature = (float)(current.Main.Temp - 273.15),
+                    Description = current.Weather[0].Description,
+                    Humidity = current.Main.Humidity,
+                    WindSpeed = Math.Round(current.Wind.Speed * 3.6, 1),
+                    WeatherIcon = current.Weather[0].Icon,
+                    Pressure = current.Main.Pressure,
+                    FeelsLike = Math.Round((current.Main.FeelsLike != 0 ? current.Main.FeelsLike : current.Main.Temp) - 273.15, 1),
+                    Visibility = current.Visibility,
+                    MinTemp = Math.Round(current.Main.TempMin - 273.15, 1),
+                    MaxTemp = Math.Round(current.Main.TempMax - 273.15, 1)
+                };
+
+                forecastData = response.List.Take(5)
+                    .Where(f => !string.IsNullOrEmpty(f.DtTxt))
+                    .Select(f => new ForecastWeather
+                    {
+                        Date = GetFormattedDate(f.DtTxt),
+                        Temp = Math.Round(f.Main.Temp - 273.15, 1),
+                        Description = f.Weather[0].Description,
+                        Icon = ConvertToMudBlazorIcon(f.Weather[0].Icon),
+                        Humidity = f.Main.Humidity,
+                        WindSpeed = Math.Round(f.Wind.Speed * 3.6, 1)
+                    }).ToList();
+
+                // Debug: Log before calling UpdateChartData
+                Console.WriteLine("Calling UpdateChartData with forecast items");
+                UpdateChartData(response.List);
+                UpdateTodayForecastData(response.List);
+                UpdateDailyHumidityForecastData(response.List);
+                UpdateDailyPrecipitationForecastData(response.List);
+                UpdateDailyWindForecastData(response.List);
+
+                Console.WriteLine("Humidity: " + currentWeather?.Humidity);
+                Console.WriteLine("Wind Speed: " + currentWeather?.WindSpeed);
+                Console.WriteLine("Feels Like: " + currentWeather?.FeelsLike);
+                Console.WriteLine("Pressure: " + currentWeather?.Pressure);
+                Console.WriteLine("Visibility: " + currentWeather?.Visibility);
+            }
+            else
+            {
+                Console.WriteLine("No data received from API");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in FetchWeatherData: {ex}");
+            Snackbar.Add($"Error fetching weather data: {ex.Message}", Severity.Error);
+            currentWeather = null;
+            forecastData.Clear();
+        }
+    }
+
+    private void UpdateChartData(List<ForecastItem> forecastItems)
+    {
+        try
+        {
+            // Debug Step 1: Initial Data
+            Console.WriteLine("\n=== Debug Step 1: Initial Data ===");
+            if (forecastItems == null)
+            {
+                Console.WriteLine("forecastItems is null");
+                return;
+            }
+            Console.WriteLine($"Total forecast items: {forecastItems.Count}");
+            Console.WriteLine($"First item DtTxt: '{forecastItems.FirstOrDefault()?.DtTxt}'");
+            Console.WriteLine($"First item Dt: {forecastItems.FirstOrDefault()?.Dt}");
+
+            // Debug Step 2: Process each item with fallback for date string
+            Console.WriteLine("\n=== Debug Step 2: Processing Data with Fallback ===");
+            var processedItems = forecastItems.Select(x => new
+            {
+                // If DtTxt is empty, convert Dt (Unix time) to a date string in "yyyy-MM-dd" format
+                DateStr = !string.IsNullOrEmpty(x.DtTxt)
+                            ? x.DtTxt.Substring(0, 10)
+                            : DateTimeOffset.FromUnixTimeSeconds(x.Dt).UtcDateTime.ToString("yyyy-MM-dd"),
+                // Use Main.Temp as a fallback if TempMax or TempMin are zero
+                TempMax = x.Main.TempMax != 0 ? x.Main.TempMax : x.Main.Temp,
+                TempMin = x.Main.TempMin != 0 ? x.Main.TempMin : x.Main.Temp
+            }).ToList();
+            Console.WriteLine($"Processed items count: {processedItems.Count}");
+            foreach (var item in processedItems.Take(3))
+            {
+                Console.WriteLine($"DateStr: {item.DateStr}, TempMax: {item.TempMax}K, TempMin: {item.TempMin}K");
+            }
+
+            // Debug Step 3: Group items by DateStr
+            Console.WriteLine("\n=== Debug Step 3: Grouping Data with Fallback ===");
+            var groupedData = processedItems.GroupBy(x => x.DateStr).ToList();
+            Console.WriteLine($"Number of groups: {groupedData.Count}");
+            foreach (var group in groupedData.Take(3))
+            {
+                Console.WriteLine($"Group Date: {group.Key}, Count: {group.Count()}");
+            }
+
+            // Debug Step 4: Process daily temperatures from grouped data
+            Console.WriteLine("\n=== Debug Step 4: Processing Daily Temperatures ===");
+            var dailyTemps = groupedData.Select(group => new
+            {
+                DateStr = group.Key,
+                // Convert from Kelvin to Celsius and round to one decimal place
+                MaxTemp = Math.Round(group.Max(x => x.TempMax - 273.15), 1),
+                MinTemp = Math.Round(group.Min(x => x.TempMin - 273.15), 1)
+            })
+            .OrderBy(x => x.DateStr)
+            .Take(5)
+            .ToList();
+            Console.WriteLine($"Processed daily temperatures count: {dailyTemps.Count}");
+            foreach (var day in dailyTemps)
+            {
+                Console.WriteLine($"Date: {day.DateStr}, Max: {day.MaxTemp}°C, Min: {day.MinTemp}°C");
+            }
+
+            // Optional: Log overall min and max to verify the range.
+            double overallMin = dailyTemps.Min(x => x.MinTemp);
+            double overallMax = dailyTemps.Max(x => x.MaxTemp);
+            Console.WriteLine($"Overall min temperature: {overallMin}°C");
+            Console.WriteLine($"Overall max temperature: {overallMax}°C");
+
+            // Debug Step 5: Create chart data (format date labels from "yyyy-MM-dd" to e.g., "Feb 14")
+            Console.WriteLine("\n=== Debug Step 5: Creating Chart Data ===");
+            _dateLabels = dailyTemps.Select(x =>
+            {
+                var parts = x.DateStr.Split('-');
+                var result = parts.Length == 3
+                    ? $"{GetMonthAbbrev(int.Parse(parts[1]))} {int.Parse(parts[2])}"
+                    : x.DateStr;
+                Console.WriteLine($"Converting {x.DateStr} to {result}");
+                return result;
+            }).ToArray();
+
+            var maxTemps = dailyTemps.Select(x => x.MaxTemp).ToArray();
+            var minTemps = dailyTemps.Select(x => x.MinTemp).ToArray();
+            Console.WriteLine($"Labels count: {_dateLabels.Length}");
+            Console.WriteLine($"Max temps count: {maxTemps.Length}");
+            Console.WriteLine($"Min temps count: {minTemps.Length}");
+
+            // Debug Step 6: Create series
+            Console.WriteLine("\n=== Debug Step 6: Creating Series ===");
+            _temperatureSeries = new List<ChartSeries>
+            {
+                new ChartSeries
+                {
+                    Name = "Maximum Temperature",
+                    Data = maxTemps
+                },
+                new ChartSeries
+                {
+                    Name = "Minimum Temperature",
+                    Data = minTemps
+                }
+            };
+            Console.WriteLine($"Series created: {_temperatureSeries.Count}");
+            Console.WriteLine($"Series 1 data points: {_temperatureSeries[0].Data.Length}");
+            Console.WriteLine($"Series 2 data points: {_temperatureSeries[1].Data.Length}");
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("\n=== ERROR ===");
+            Console.WriteLine($"Error type: {ex.GetType().Name}");
+            Console.WriteLine($"Message: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            Snackbar.Add($"Error processing chart data: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void UpdateTodayForecastData(List<ForecastItem> forecastItems)
+    {
+        try
+        {
+            // Get current date and tomorrow date as strings.
+            var now = DateTime.Now;
+            string todayStr = now.ToString("yyyy-MM-dd");
+            string tomorrowStr = now.AddDays(1).ToString("yyyy-MM-dd");
+ 
+            // Get all forecast items for today (the entire day's 3-hourly data):
+            var todayItems = forecastItems
+                .Where(x =>
+                {
+                    string dtStr = !string.IsNullOrEmpty(x.DtTxt)
+                        ? x.DtTxt.Substring(0, 10)
+                        : DateTimeOffset.FromUnixTimeSeconds(x.Dt).UtcDateTime.ToString("yyyy-MM-dd");
+                    return dtStr == todayStr;
+                })
+                .OrderBy(x => x.Dt)
+                .ToList();
+
+            if (todayItems.Count == 0)
+            {
+                Console.WriteLine("No forecast items for today available.");
+                _todayForecastSeries = new List<ChartSeries>();
+                _todayForecastLabels = new string[0];
+                return;
+            }
+
+            // Build the time labels and temperature data arrays for all of today's forecast items.
+            var times = todayItems.Select(x =>
+            {
+                string timeLabel;
+                if (!string.IsNullOrEmpty(x.DtTxt))
+                {
+                    var dt = DateTime.Parse(x.DtTxt);
+                    timeLabel = dt.ToString("HH:mm");
+                }
+                else
+                {
+                    var dt = DateTimeOffset.FromUnixTimeSeconds(x.Dt).UtcDateTime;
+                    timeLabel = dt.ToString("HH:mm");
+                }
+                return timeLabel;
+            }).ToArray();
+  
+            var temps = todayItems.Select(x => Math.Round(x.Main.Temp - 273.15, 1)).ToArray();
+  
+            // Update the forecast series and labels.
+            _todayForecastSeries = new List<ChartSeries>
+            {
+                new ChartSeries
+                {
+                    Name = "Temperature",
+                    Data = temps
+                }
+            };
+
+            _todayForecastLabels = times;
+
+            Console.WriteLine("Today's forecast added. Data points: " + temps.Length);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Error processing today's forecast: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Groups the forecast items by day, computes the average humidity for each day,
+    /// and sets up a chart series and labels for the humidity graph.
+    /// </summary>
+    /// <param name="forecastItems">List of forecast items from the API</param>
+    private void UpdateDailyHumidityForecastData(List<ForecastItem> forecastItems)
+    {
+        // Group forecast items by day using dt_txt (or fallback using dt)
+        var dailyGroups = forecastItems
+            .GroupBy(item =>
+            {
+                string dateStr = !string.IsNullOrEmpty(item.DtTxt)
+                    ? item.DtTxt.Substring(0, 10)
+                    : DateTimeOffset.FromUnixTimeSeconds(item.Dt).UtcDateTime.ToString("yyyy-MM-dd");
+                return dateStr;
+            })
+            .OrderBy(g => g.Key);
+
+        List<string> dailyLabels = new List<string>();
+        List<double> dailyHumidityAverages = new List<double>();
+
+        // Compute the average humidity for each day
+        foreach (var group in dailyGroups)
+        {
+            // Convert the group key (date string) to DateTime for a nicer label (ex: "Feb 14")
+            DateTime day = DateTime.Parse(group.Key);
+            dailyLabels.Add(day.ToString("MMM dd"));
+            dailyHumidityAverages.Add(group.Average(item => item.Main.Humidity));
+        }
+
+        _humidityDailySeries = new List<ChartSeries>
+        {
+            new ChartSeries
+            {
+                Name = "Avg Humidity (%)",
+                Data = dailyHumidityAverages.ToArray()
+            }
+        };
+        _humidityDailyLabels = dailyLabels.ToArray();
+
+        Console.WriteLine("Daily humidity forecast added. Data points: " + dailyHumidityAverages.Count);
+    }
+
+    /// <summary>
+    /// Groups forecast items by day, sums the 3-hourly precipitation values,
+    /// and stores daily precipitation totals in a chart series.
+    /// </summary>
+    /// <param name="forecastItems">List of forecast items from the API</param>
+    private void UpdateDailyPrecipitationForecastData(List<ForecastItem> forecastItems)
+    {
+        // Group forecast items by day using dt_txt (or the dt fallback)
+        var dailyGroups = forecastItems
+            .GroupBy(item =>
+            {
+                string dateStr = !string.IsNullOrEmpty(item.DtTxt)
+                    ? item.DtTxt.Substring(0, 10)
+                    : DateTimeOffset.FromUnixTimeSeconds(item.Dt).UtcDateTime.ToString("yyyy-MM-dd");
+                return dateStr;
+            })
+            .OrderBy(g => g.Key);
+
+        List<string> labels = new List<string>();
+        List<double> dailyTotals = new List<double>();
+
+        // For each day, sum the precipitation values (using Rain.ThreeHour, fallback to 0)
+        foreach (var group in dailyGroups)
+        {
+            DateTime day = DateTime.Parse(group.Key);
+            labels.Add(day.ToString("MMM dd"));
+            double totalPrecip = group.Sum(item => item.Rain?.ThreeHour ?? 0);
+            dailyTotals.Add(totalPrecip);
+        }
+
+        _precipitationDailySeries = new List<ChartSeries>
+        {
+            new ChartSeries
+            {
+                Name = "Daily Precipitation (mm)",
+                Data = dailyTotals.ToArray()
+            }
+        };
+        _precipitationDailyLabels = labels.ToArray();
+
+        Console.WriteLine("Daily precipitation total added. Data points: " + dailyTotals.Count);
+    }
+
+    /// <summary>
+    /// Groups forecast items by day, calculates the average wind speed and wind gust (converted to km/h),
+    /// and stores the results in a chart series.
+    /// </summary>
+    /// <param name="forecastItems">List of forecast items from the API</param>
+    private void UpdateDailyWindForecastData(List<ForecastItem> forecastItems)
+    {
+        // Group forecast items by day using DtTxt (or the dt fallback)
+        var dailyGroups = forecastItems
+            .GroupBy(item =>
+            {
+                string dateStr = !string.IsNullOrEmpty(item.DtTxt)
+                    ? item.DtTxt.Substring(0, 10)
+                    : DateTimeOffset.FromUnixTimeSeconds(item.Dt).UtcDateTime.ToString("yyyy-MM-dd");
+                return dateStr;
+            })
+            .OrderBy(g => g.Key);
+
+        List<string> labels = new List<string>();
+        List<double> avgWindSpeed = new List<double>();
+        List<double> avgWindGust = new List<double>();
+
+        foreach (var group in dailyGroups)
+        {
+            DateTime day = DateTime.Parse(group.Key);
+            labels.Add(day.ToString("MMM dd"));
+
+            // Calculate average wind speed (m/s) and convert to km/h (multiply by 3.6)
+            double speedAvg = group.Average(item => item.Wind.Speed) * 3.6;
+            avgWindSpeed.Add(speedAvg);
+
+            // Calculate average wind gust (m/s) and convert to km/h (multiply by 3.6)
+            double gustAvg = group.Average(item => item.Wind.Gust) * 3.6;
+            avgWindGust.Add(gustAvg);
+        }
+
+        _windDailySeries = new List<ChartSeries>
+        {
+            new ChartSeries
+            {
+                Name = "Avg Wind Speed (km/h)",
+                Data = avgWindSpeed.ToArray()
+            },
+            new ChartSeries
+            {
+                Name = "Avg Wind Gust (km/h)",
+                Data = avgWindGust.ToArray()
+            }
+        };
+        _windDailyLabels = labels.ToArray();
+
+        Console.WriteLine("Daily wind forecast added. Data points: " + labels.Count);
+    }
+
+    // Helper method to get month abbreviation
+    private string GetMonthAbbrev(int month)
+    {
+        return month switch
+        {
+            1 => "Jan",
+            2 => "Feb",
+            3 => "Mar",
+            4 => "Apr",
+            5 => "May",
+            6 => "Jun",
+            7 => "Jul",
+            8 => "Aug",
+            9 => "Sep",
+            10 => "Oct",
+            11 => "Nov",
+            12 => "Dec",
+            _ => "???"
+        };
+    }
+
+    private string GetFormattedDate(string dateText, string format = "ddd, MMM dd")
+    {
+        if (string.IsNullOrEmpty(dateText)) return string.Empty;
+        
+        try
+        {
+            return DateTime.Parse(dateText).ToString(format);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private string ConvertToMudBlazorIcon(string openWeatherIcon)
+    {
+        return openWeatherIcon switch
+        {
+            "01d" or "01n" => Icons.Material.Filled.WbSunny,
+            "02d" or "02n" => Icons.Material.Filled.Cloud,
+            "03d" or "03n" => Icons.Material.Filled.CloudQueue,
+            "04d" or "04n" => Icons.Material.Filled.CloudQueue,
+            "09d" or "09n" => Icons.Material.Filled.Umbrella,
+            "10d" or "10n" => Icons.Material.Filled.Grain,
+            "11d" or "11n" => Icons.Material.Filled.Bolt,
+            "13d" or "13n" => Icons.Material.Filled.AcUnit,
+            "50d" or "50n" => Icons.Material.Filled.Visibility,
+            _ => Icons.Material.Filled.Help
+        };
+    }
+
+    private async Task AddToFavorites()
+    {
+        if (currentWeather == null)
+        {
+            SnackBar.Add("No weather data available to add.", Severity.Warning);
+            return;
+        }
+
+        var client = Supabase.GetClient();
+        if (client.Auth.CurrentUser == null)
+        {
+            NavigationManager.NavigateTo("/login", true);
+            return;
+        }
+        else
+        {
+            userId = client.Auth.CurrentUser.Id;
+        }
+
+        // Load the current user's favorite cities using the API
+        List<FavoriteCity>? storedCities = null;
+        try
+        {
+            storedCities = await Http.GetFromJsonAsync<List<FavoriteCity>>($"{apiBase}/favorites/{userId}");
+        }
+        catch (Exception ex)
+        {
+            SnackBar.Add("Could not load favorites: " + ex.Message, Severity.Error);
+            return;
+        }
+
+        // Check if the current city is already a favorite
+        if (storedCities != null && storedCities.Any(c => 
+            c.City.Equals(currentWeather.CityName, StringComparison.OrdinalIgnoreCase)))
+        {
+            SnackBar.Add("City is already in your favorites", Severity.Warning);
+            return;
+        }
+
+        // Prepare the favorite city object to add
+        var favorite = new FavoriteCity { UserId = userId, City = currentWeather.CityName };
+        var response = await Http.PostAsJsonAsync($"{apiBase}/favorites", favorite);
+
+        if (response.IsSuccessStatusCode)
+        {
+            SnackBar.Add("City added to favorites!", Severity.Success);
+        }
+        else
+        {
+            SnackBar.Add("Failed to add city to favorites.", Severity.Error);
+        }
+    }
+
+    public class CurrentWeather
+    {
+        public string? CityName { get; set; }
+        public string? CountryCode { get; set; }
+        public float Temperature { get; set; }
+        public string? Description { get; set; }
+        public int Humidity { get; set; }
+        public double WindSpeed { get; set; }
+        public string? WeatherIcon { get; set; }
+        public int Pressure { get; set; }
+        public double FeelsLike { get; set; }
+        public int Visibility { get; set; }
+        public double MinTemp { get; set; }
+        public double MaxTemp { get; set; }
+    }
+
+    public class WeatherApiResponse
+    {
+        public List<ForecastItem> List { get; set; } = new();
+        public CityInfo City { get; set; } = new();
+    }
+
+    public class CityInfo
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Country { get; set; } = string.Empty;
+        public long Sunrise { get; set; }
+        public long Sunset { get; set; }
+    }
+
+    public class ForecastItem
+    {
+        public long Dt { get; set; }
+        public MainInfo Main { get; set; } = new();
+        public List<WeatherInfo> Weather { get; set; } = new();
+        public WindInfo Wind { get; set; } = new();
+        public int Visibility { get; set; }
+        public string DtTxt { get; set; } = string.Empty;
+        public RainInfo? Rain { get; set; }
+        public SnowInfo? Snow { get; set; }
+    }
+
+    public class MainInfo
+    {
+        [JsonPropertyName("temp")]
+        public double Temp { get; set; }
+
+        [JsonPropertyName("humidity")]
+        public int Humidity { get; set; }
+
+        [JsonPropertyName("feels_like")]
+        public double FeelsLike { get; set; }
+
+        [JsonPropertyName("temp_min")]
+        public double TempMin { get; set; }
+
+        [JsonPropertyName("temp_max")]
+        public double TempMax { get; set; }
+
+        [JsonPropertyName("pressure")]
+        public int Pressure { get; set; }
+
+        [JsonPropertyName("sea_level")]
+        public int SeaLevel { get; set; }
+
+        [JsonPropertyName("grnd_level")]
+        public int GrndLevel { get; set; }
+    }
+
+    public class WeatherInfo
+    {
+        public string Description { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+    }
+
+    public class WindInfo
+    {
+        public double Speed { get; set; }
+        public double Gust { get; set; }
+    }
+
+    public class RainInfo
+    {
+        [JsonPropertyName("3h")]
+        public double ThreeHour { get; set; }
+    }
+
+    public class SnowInfo
+    {
+        [JsonPropertyName("3h")]
+        public double ThreeHour { get; set; }
+    }
+
+    class ForecastWeather
+    {
+        public string? Date { get; set; }
+        public double Temp { get; set; }
+        public string? Description { get; set; }
+        public string? Icon { get; set; }
+        public int Humidity { get; set; }
+        public double WindSpeed { get; set; }
+    }
+
+    public class FavoriteCity
+    {
+        public string UserId { get; set; }
+        public string City { get; set; }
+    }
+
+    public class DailyTemperature
+    {
+        public DateTime Date { get; set; }
+        public double MaxTemp { get; set; }
+        public double MinTemp { get; set; }
+    }
+}
+
+<style>
+    .dashboard-container {
+        height: 100vh;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .h-100 {
+        height: 100%;
+    }
+
+    .main-weather-card {
+        background: linear-gradient(135deg, rgb(100, 181, 246) 0%, rgb(30, 136, 229) 100%);
+        color: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        min-height: 450px; /* More reasonable height */
+        display: flex;
+        flex-direction: column;
+    }
+
+    .forecast-carousel {
+        background: var(--mud-palette-surface);
+        border-radius: 16px;
+        overflow: hidden;
+        padding: 24px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .search-container {
+        background: rgba(var(--mud-palette-primary-rgb), 0.03);
+        border-radius: 12px;
+        padding: 24px;
+    }
+
+    .weather-icon-container {
+        background: rgba(var(--mud-palette-primary-rgb), 0.1);
+        border-radius: 50%;
+        padding: 32px;
+        width: 100px;
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+    }
+
+    ::deep .carousel-bullets {
+        bottom: 16px;
+    }
+
+    ::deep .mud-carousel-bullets {
+        gap: 8px;
+    }
+
+    ::deep .mud-carousel-bullet {
+        width: 8px;
+        height: 8px;
+        opacity: 0.5;
+        background-color: var(--mud-palette-primary);
+        transition: all 0.3s ease;
+    }
+
+    ::deep .mud-carousel-bullet.active {
+        opacity: 1;
+        transform: scale(1.2);
+    }
+
+    ::deep .mud-carousel-arrow {
+        background-color: rgba(var(--mud-palette-primary-rgb), 0.1);
+        border-radius: 50%;
+        transition: all 0.3s ease;
+    }
+
+    ::deep .mud-carousel-arrow:hover {
+        background-color: rgba(var(--mud-palette-primary-rgb), 0.2);
+    }
+
+    .forecast-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 16px;
+    }
+
+    .forecast-content .mud-icon {
+        font-size: 48px;
+    }
+
+    ::deep .mud-carousel {
+        border-radius: 12px;
+        height: 100% !important;
+        background: rgba(var(--mud-palette-primary-rgb), 0.02);
+    }
+
+    ::deep .mud-carousel-item {
+        padding: 16px;
+    }
+
+    ::deep .mud-chart-line {
+        min-height: 300px;
+    }
+
+    ::deep .mud-chart-line path {
+        stroke-width: 2.5px;
+    }
+
+    ::deep .mud-chart-grid line {
+        stroke: rgba(var(--mud-palette-primary-rgb), 0.1);
+    }
+
+    ::deep .mud-chart-legend text {
+        fill: var(--mud-palette-text-primary);
+        font-size: 12px;
+    }
+
+    ::deep .mud-chart text {
+        fill: var(--mud-palette-text-primary);
+        font-size: 11px;
+    }
+
+    ::deep .mud-chart-tooltip {
+        background-color: var(--mud-palette-surface);
+        border: 1px solid var(--mud-palette-divider);
+        padding: 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+
+    .chart-container {
+        height: 100%;
+        padding-left: 60px; /* Adjust as needed */
+    }
+
+    /* Custom styles for the forecast slider */
+    .forecast-slider .mud-slider-track {
+        background-color: #ffffff !important;  /* White track (ensured) */
+        height: 4px !important;
+    }
+
+    .forecast-slider .mud-slider-thumb {
+        background-color: #ffffff !important;  /* White thumb */
+        border: 2px solid #ffffff !important;
+    }
+
+    .forecast-slider .mud-slider-tick {
+        background-color: #000000 !important;  /* Black tick marks (ensured) */
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+    }
+
+    /* Custom styles for weather detail cards in the main weather card */
+    .weather-detail-card {
+        background: transparent !important;
+        color: white !important;
+        box-shadow: none !important;
+    }
+</style>
+

@@ -1,0 +1,129 @@
+﻿@page "/settings"
+@inject SupabaseClient Supabase
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@inject ISnackbar SnackBar
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="settings-container" Style="height: calc(100vh - 64px);">
+    <MudPaper Class="settings-header mb-4" Elevation="0">
+        <MudText Typo="Typo.h4">Account Settings</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Surface" Class="mt-1">
+            Manage your profile and preferences
+        </MudText>
+    </MudPaper>
+
+    <MudGrid>
+        <!-- Update Email Only Section -->
+        <MudItem xs="12">
+            <MudCard Class="settings-card">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Update Your Email Address</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent Class="pa-4">
+                    <MudTextField @bind-Value="email" 
+                                  Label="Email" 
+                                  Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start" 
+                                  AdornmentIcon="@Icons.Material.Filled.Email"
+                                  Class="mb-2" />
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Primary" 
+                               OnClick="UpdateEmail"
+                               StartIcon="@Icons.Material.Filled.Save"
+                               FullWidth="true">
+                        Update Email
+                    </MudButton>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private string email = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var client = Supabase.GetClient();
+        if (client.Auth.CurrentUser == null)
+        {
+            NavigationManager.NavigateTo("/login", true);
+        }
+        else
+        {
+            email = client.Auth.CurrentUser.Email;
+        }
+    }
+
+    private async Task UpdateEmail()
+    {
+        if(!IsValidEmail(email))
+        {
+            SnackBar.Add("Invalid email format", Severity.Warning);
+            return;
+        }
+
+        // Use the Supabase code: update the email; a confirmation mail is sent
+        var attrs = new Supabase.Gotrue.UserAttributes { Email = email };
+        var response = await Supabase.GetClient().Auth.Update(attrs);
+        if (response != null)
+        {
+            SnackBar.Add("Confirmation email sent.", Severity.Success);
+        }
+        else
+        {
+            SnackBar.Add("Update failed. Please try again.", Severity.Error);
+        }
+    }
+
+    private bool IsValidEmail(string email)
+    {
+        try {
+            var addr = new System.Net.Mail.MailAddress(email);
+            return addr.Address == email;
+        } catch {
+            return false;
+        }
+    }
+}
+
+<style>
+    .settings-container {
+        padding: 16px;
+        overflow: hidden;
+    }
+
+    .settings-header {
+        background: linear-gradient(135deg, rgb(100, 181, 246) 0%, rgb(30, 136, 229) 100%);
+        color: white;
+        padding: 24px;
+        border-radius: 12px;
+    }
+
+    .settings-card {
+        border-radius: 12px;
+        height: 100%;
+        background: var(--mud-palette-background);
+        border: 1px solid var(--mud-palette-lines-default);
+        overflow: hidden;
+    }
+
+    .hidden-file-input {
+        display: none;
+    }
+
+    ::deep .mud-button {
+        border-radius: 8px;
+        text-transform: none;
+    }
+
+    ::deep .mud-input-outlined {
+        background: var(--mud-palette-background);
+    }
+
+    ::deep .mud-card-content {
+        padding: 16px;
+    }
+</style>

@@ -1,0 +1,290 @@
+﻿@page "/home"
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <!-- Search Section -->
+    <MudPaper Elevation="0" Class="search-container mb-6">
+    <MudGrid>
+            <MudItem xs="12" md="8" Class="d-flex">
+                <MudTextField @bind-Value="searchQuery" 
+                            Placeholder="Search city..." 
+                            Variant="Variant.Outlined"
+                            Class="flex-grow-1"
+                            Adornment="Adornment.Start"
+                            AdornmentIcon="@Icons.Material.Filled.Search" />
+                <MudButton Color="Color.Primary" 
+                          OnClick="SearchWeather" 
+                          Class="ml-2 px-6"
+                          Variant="Variant.Filled">
+                    Search
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (currentWeather != null)
+    {
+        <!-- Main Weather Display -->
+        <MudGrid>
+            <!-- Current Weather Card -->
+            <MudItem xs="12" md="8">
+                <MudPaper Class="pa-6 main-weather-card">
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <div class="d-flex flex-column">
+                                <MudText Typo="Typo.h3">@currentWeather.CityName</MudText>
+                                <MudText Typo="Typo.body1" Class="mb-4">@DateTime.Now.ToString("dddd, MMMM dd, yyyy")</MudText>
+                                <div class="d-flex align-center">
+                                    <MudIcon Icon="@ConvertToMudBlazorIcon(currentWeather.WeatherIcon)" 
+                                            Size="Size.Large" 
+                                            Class="mr-4" />
+                                    <div>
+                                        <MudText Typo="Typo.h2">@Math.Round(currentWeather.Temperature)°C</MudText>
+                                        <MudText Typo="Typo.body1" Style="text-transform: capitalize;">
+                                            @currentWeather.Description
+                                        </MudText>
+                                    </div>
+                                </div>
+                            </div>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudGrid>
+                                <MudItem xs="6">
+                                    <MudCard Icon="@Icons.Material.Filled.WaterDrop" 
+                                                   Title="Humidity" 
+                                                   Value="@($"{currentWeather.Humidity}%")" />
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudCard Icon="@Icons.Material.Filled.Air" 
+                                                   Title="Wind Speed" 
+                                                   Value="@($"{currentWeather.WindSpeed} km/h")" />
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudCard Icon="@Icons.Material.Filled.Compress" 
+                                                   Title="Pressure" 
+                                                   Value="@($"{currentWeather.Pressure} hPa")" />
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudCard Icon="@Icons.Material.Filled.Visibility" 
+                                                   Title="Visibility" 
+                                                   Value="@($"{currentWeather.Visibility/1000:F1} km")" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Sunrise/Sunset Card -->
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-6 sun-card">
+                    <MudText Typo="Typo.h6" Class="mb-4">Sun Schedule</MudText>
+                    <div class="d-flex justify-space-between align-center mb-4">
+                        <div class="text-center">
+                            <MudIcon Icon="@Icons.Material.Filled.WbSunny" Color="Color.Warning" Size="Size.Large" />
+                            <MudText Typo="Typo.body2">Sunrise</MudText>
+                            <MudText Typo="Typo.body1">@FormatTime(currentWeather.Sunrise)</MudText>
+                        </div>
+                        <MudDivider Vertical="true" FlexItem="true" />
+                        <div class="text-center">
+                            <MudIcon Icon="@Icons.Material.Filled.NightsStay" Color="Color.Default" Size="Size.Large" />
+                            <MudText Typo="Typo.body2">Sunset</MudText>
+                            <MudText Typo="Typo.body1">@FormatTime(currentWeather.Sunset)</MudText>
+                        </div>
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Sign In Prompt -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-6 sign-in-card">
+                    <MudGrid Justify="Justify.Center" Class="align-center">
+                        <MudItem xs="12" Class="text-center">
+                            <MudIcon Icon="@Icons.Material.Filled.CloudQueue" 
+                                    Color="Color.Primary" 
+                                    Size="Size.Large" 
+                                    Class="mb-4" />
+                            <MudText Typo="Typo.h5" Class="mb-4">Want to see detailed weather forecasts?</MudText>
+                            <MudText Typo="Typo.body1" Class="mb-6">Sign in to access 5-day forecasts, weather trends, and more!</MudText>
+                            <MudButton Variant="Variant.Filled" 
+                                     Color="Color.Primary" 
+                                     Size="Size.Large"
+                                     OnClick="@(() => NavigationManager.NavigateTo("/login"))">
+                                Sign Up
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+        }
+</MudContainer>
+
+@code {
+    private string searchQuery = "New York";
+    private CurrentWeather? currentWeather;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SearchWeather();
+    }
+
+    private async Task SearchWeather()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<WeatherApiResponse>($"https://localhost:7281/api/weather/{searchQuery}");
+            if (response != null && response.List.Any())
+            {
+                var current = response.List.First();
+                currentWeather = new CurrentWeather
+                {
+                    CityName = response.City.Name,
+                    Temperature = current.Main.Temp - 273.15,
+                    Description = current.Weather[0].Description,
+                    Humidity = current.Main.Humidity,
+                    WindSpeed = current.Wind.Speed,
+                    WeatherIcon = current.Weather[0].Icon,
+                    Pressure = current.Main.Pressure,
+                    Visibility = current.Visibility,
+                    Sunrise = DateTimeOffset.FromUnixTimeSeconds(response.City.Sunrise).LocalDateTime,
+                    Sunset = DateTimeOffset.FromUnixTimeSeconds(response.City.Sunset).LocalDateTime
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+    }
+
+    private string FormatTime(DateTime time) => time.ToString("HH:mm");
+
+    private string ConvertToMudBlazorIcon(string openWeatherIcon)
+    {
+        return openWeatherIcon switch
+        {
+            "01d" => Icons.Material.Filled.WbSunny,
+            "01n" => Icons.Material.Filled.NightsStay,
+            "02d" or "02n" => Icons.Material.Filled.Cloud,
+            "03d" or "03n" => Icons.Material.Filled.CloudQueue,
+            "04d" or "04n" => Icons.Material.Filled.CloudQueue,
+            "09d" or "09n" => Icons.Material.Filled.Umbrella,
+            "10d" or "10n" => Icons.Material.Filled.Grain,
+            "11d" or "11n" => Icons.Material.Filled.Bolt,
+            "13d" or "13n" => Icons.Material.Filled.AcUnit,
+            "50d" or "50n" => Icons.Material.Filled.Visibility,
+            _ => Icons.Material.Filled.Help
+        };
+    }
+
+    public class CurrentWeather
+    {
+        public string CityName { get; set; } = string.Empty;
+        public double Temperature { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public int Humidity { get; set; }
+        public double WindSpeed { get; set; }
+        public string WeatherIcon { get; set; } = string.Empty;
+        public int Pressure { get; set; }
+        public int Visibility { get; set; }
+        public DateTime Sunrise { get; set; }
+        public DateTime Sunset { get; set; }
+    }
+
+    public class WeatherApiResponse
+    {
+        public List<ForecastItem> List { get; set; } = new();
+        public CityInfo City { get; set; } = new();
+    }
+
+    public class CityInfo
+    {
+        public string Name { get; set; } = string.Empty;
+        public long Sunrise { get; set; }
+        public long Sunset { get; set; }
+    }
+
+    public class ForecastItem
+    {
+        public MainInfo Main { get; set; } = new();
+        public List<WeatherInfo> Weather { get; set; } = new();
+        public WindInfo Wind { get; set; } = new();
+        public int Visibility { get; set; }
+        public string DtTxt { get; set; } = string.Empty;
+    }
+
+    public class MainInfo
+    {
+        public double Temp { get; set; }
+        public int Humidity { get; set; }
+        public int Pressure { get; set; }
+    }
+
+    public class WeatherInfo
+    {
+        public string Description { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+    }
+
+    public class WindInfo
+    {
+        public double Speed { get; set; }
+        public int Deg { get; set; }
+        public double Gust { get; set; }
+    }
+}
+
+@* Weather Info Card Component *@
+<MudCardContent>
+    @code {
+        [Parameter] public string Icon { get; set; }
+        [Parameter] public string Title { get; set; }
+        [Parameter] public string Value { get; set; }
+
+        private RenderFragment WeatherInfoCard() =>@<div class="weather-info-card">
+            <MudIcon Icon="@Icon" Color="Color.Primary" />
+            <MudText Typo="Typo.caption">@Title</MudText>
+            <MudText Typo="Typo.body1">@Value</MudText>
+        </div>;
+    }
+</MudCardContent>
+
+<style>
+    .search-container {
+        background: rgba(var(--mud-palette-primary-rgb), 0.05);
+        border-radius: 12px;
+        padding: 24px;
+    }
+
+    .main-weather-card {
+        background: linear-gradient(135deg, rgb(100, 181, 246) 0%, rgb(30, 136, 229) 100%);
+        color: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .sun-card {
+        background: var(--mud-palette-surface);
+        border-radius: 12px;
+        height: 100%;
+    }
+
+    .weather-info-card {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+    }
+
+    .sign-in-card {
+        background: var(--mud-palette-surface);
+        border-radius: 12px;
+        border: 1px solid var(--mud-palette-lines-default);
+    }
+
+    .sign-in-card .mud-icon {
+        font-size: 48px;
+    }
+</style>

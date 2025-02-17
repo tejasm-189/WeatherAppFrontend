@@ -1,0 +1,167 @@
+﻿@page "/login"
+@inject NavigationManager Nav
+@inject SupabaseClient supabase
+@using MudBlazor
+
+<div class="login-background">
+    <div class="login-overlay">
+        <MudContainer MaxWidth="MaxWidth.Small" Class="login-container">
+            <MudCard Class="login-card">
+                <MudCardContent>
+                    <div class="d-flex flex-column align-center">
+                        <MudIcon Icon="@Icons.Material.Filled.Cloud" 
+                                Color="Color.Primary" 
+                                Size="Size.Large" 
+                                Style="width: 64px; height: 64px;" 
+                                Class="mb-4" />
+                        <MudText Typo="Typo.h4" Class="mb-4">@(isLogin ? "Welcome Back" : "Create Account")</MudText>
+                        <MudText Typo="Typo.body1" Class="mb-6 text-center text-overlay">
+                            @(isLogin ? "Sign in to access your weather dashboard" : "Join us to get personalized weather forecasts")
+                        </MudText>
+                    </div>
+
+                    @if (errorMessage != null)
+                    {
+                        <MudAlert Severity="Severity.Error" Class="mb-4" Elevation="0">@errorMessage</MudAlert>
+                    }
+
+                    <MudTextField @bind-Value="email" 
+                                Label="Email" 
+                                Variant="Variant.Outlined"
+                                Class="mb-4"
+                                Adornment="Adornment.Start"
+                                AdornmentIcon="@Icons.Material.Filled.Email" />
+
+                    <MudTextField @bind-Value="password" 
+                                Label="Password" 
+                                Variant="Variant.Outlined"
+                                InputType="InputType.Password"
+                                Class="mb-6"
+                                Adornment="Adornment.Start"
+                                AdornmentIcon="@Icons.Material.Filled.Lock" />
+
+                    <MudButton Variant="Variant.Filled" 
+                              Color="Color.Primary" 
+                              Size="Size.Large" 
+                              FullWidth="true"
+                              Class="mb-4"
+                              OnClick="@(isLogin ? LoginAs : SignUp)">
+                        @(isLogin ? "Sign In" : "Create Account")
+                    </MudButton>
+
+                    <MudText Align="Align.Center" Class="text-overlay">
+                        @(isLogin ? "Don't have an account? " : "Already have an account? ")
+                        <MudLink Color="Color.Primary" OnClick="@(() => isLogin = !isLogin)">
+                            @(isLogin ? "Create one" : "Sign in")
+                        </MudLink>
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudContainer>
+    </div>
+</div>
+
+<style>
+    .login-background {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--mud-palette-background);
+        background-size: cover;
+        background-position: center;
+    }
+
+    .login-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .login-container {
+        position: relative;
+        z-index: 1;
+    }
+
+    .login-card {
+        background: var(--mud-palette-background) !important;
+        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: 12px !important;
+        padding: 24px;
+        box-shadow: var(--mud-elevation-4);
+    }
+
+    ::deep .mud-input-outlined {
+        background: var(--mud-palette-background);
+    }
+
+    ::deep .mud-button {
+        border-radius: 8px;
+        text-transform: none;
+    }
+
+    ::deep .mud-button-filled {
+        box-shadow: var(--mud-elevation-4);
+        background-color: var(--mud-palette-primary) !important;
+    }
+
+    ::deep .mud-link {
+        cursor: pointer;
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    ::deep .mud-link:hover {
+        text-decoration: underline;
+    }
+
+    .text-overlay {
+        color: var(--mud-palette-text-primary);
+    }
+</style>
+
+@code {
+    private string email = "";
+    private string password = "";
+    private string? errorMessage;
+    private bool isLogin = true;
+
+    private async Task LoginAs()
+    {
+        try
+        {
+            var client = supabase.GetClient();
+            var session = await client.Auth.SignIn(email, password);
+            if (session != null)
+            {
+                Nav.NavigateTo("/dashboard");  // Changed from /weather to /dashboard
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Login failed: " + ex.Message;
+        }
+    }
+
+    private async Task SignUp()
+    {
+        try
+        {
+            var client = supabase.GetClient();
+            var user = await client.Auth.SignUp(email, password);
+            errorMessage = "Signup successful! Please check your email.";
+            // Optionally switch to login view after successful signup
+            isLogin = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Signup failed: " + ex.Message;
+        }
+    }
+}

@@ -1,0 +1,38 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div style="height: 100vh; display: flex; flex-direction: column;">
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        <MudText Typo="Typo.h6">Weather App</MudText>
+        <MudSpacer />
+    </MudAppBar>
+
+    <div style="flex: 1; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; bottom: 0; width: @(_drawerOpen ? "260px" : "0px"); 
+                    transition: width 0.3s; background-color: var(--mud-palette-surface);
+                    box-shadow: var(--mud-elevation-2); z-index: 2;">
+            <MudDrawerHeader>
+                <MudText Typo="Typo.h6">Weather App</MudText>
+            </MudDrawerHeader>
+            <NavMenu />
+        </div>
+
+        <div style="position: absolute; top: 0; right: 0; bottom: 0; left: @(_drawerOpen ? "260px" : "0px"); 
+                    transition: left 0.3s; overflow-y: auto;">
+            @Body
+        </div>
+    </div>
+</div>
+
+@code {
+    bool _drawerOpen = true;
+
+    void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+} 

@@ -1,0 +1,18 @@
+﻿
+    .root-container
+
+{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.welcome-card {
+    padding: 2rem;
+    text-align: center;
+    width: 100%;
+    max-width: 400px;
+}
+
+

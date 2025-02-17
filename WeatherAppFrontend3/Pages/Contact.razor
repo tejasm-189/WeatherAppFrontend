@@ -1,0 +1,75 @@
+﻿@page "/contact"
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="contact-container">
+    <MudPaper Class="p-4">
+        <MudText Typo="Typo.h4" Class="text-center mb-4">Contact Us</MudText>
+
+        <MudForm Model="@this">
+            <MudGrid Spacing="3">
+                <MudItem xs="12">
+                    <MudText Typo="Typo.body1">
+                        Have questions or need support? Fill out the form below, and we'll get back to you as soon as possible.
+                    </MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField Label="Your Name" Variant="Variant.Outlined" @bind-Value="Name" Required="true">
+                        @* <InputAdornment Position="Adornment.Start"> *@
+                            <MudIcon Icon="@Icons.Material.Filled.Person" />
+                        @* </InputAdornment> *@
+                    </MudTextField>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField Label="Your Email" Variant="Variant.Outlined" @bind-Value="Email" Required="true" Type="email">
+                        @* <InputAdornment Position="Adornment.Start"> *@
+                            <MudIcon Icon="@Icons.Material.Filled.Email" />
+                        @* </InputAdornment> *@
+                    </MudTextField>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField Label="Message" Variant="Variant.Outlined" @bind-Value="Message" Rows="4" Required="true">
+                        @* <InputAdornment Position="Adornment.Start"> *@
+                            <MudIcon Icon="@Icons.Material.Filled.Message" />
+                        @* </InputAdornment> *@
+                    </MudTextField>
+                </MudItem>
+
+                <MudItem xs="12" Class="text-center">
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitForm">Submit</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+
+        <MudDivider Class="my-4" />
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="4" Class="text-center">
+                <MudIconButton Icon="@Icons.Material.Filled.Email" Color="Color.Primary" />
+                <MudText Typo="Typo.subtitle1">support@weatherapp.com</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="4" Class="text-center">
+                <MudIconButton Icon="@Icons.Material.Filled.Phone" Color="Color.Primary" />
+                <MudText Typo="Typo.subtitle1">+1 234 567 890</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="4" Class="text-center">
+                <MudIconButton Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary" />
+                <MudText Typo="Typo.subtitle1">123 Weather St, Cloud City</MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private string Name { get; set; } = "";
+    private string Email { get; set; } = "";
+    private string Message { get; set; } = "";
+
+    private void SubmitForm()
+    {
+        Console.WriteLine($"Name: {Name}, Email: {Email}, Message: {Message}");
+    }
+}
