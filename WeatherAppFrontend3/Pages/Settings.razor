@@ -3,6 +3,8 @@
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JS
 @inject ISnackbar SnackBar
+@using Supabase.Gotrue
+@using GemBox.Email; 
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="settings-container" Style="height: calc(100vh - 64px);">
     <MudPaper Class="settings-header mb-4" Elevation="0">
@@ -22,17 +24,17 @@
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent Class="pa-4">
-                    <MudTextField @bind-Value="email" 
-                                  Label="Email" 
-                                  Variant="Variant.Outlined"
-                                  Adornment="Adornment.Start" 
-                                  AdornmentIcon="@Icons.Material.Filled.Email"
-                                  Class="mb-2" />
-                    <MudButton Variant="Variant.Filled" 
-                               Color="Color.Primary" 
-                               OnClick="UpdateEmail"
-                               StartIcon="@Icons.Material.Filled.Save"
-                               FullWidth="true">
+                    <MudTextField @bind-Value="email"
+                    Label="Email"
+                    Variant="Variant.Outlined"
+                    Adornment="Adornment.Start"
+                    AdornmentIcon="@Icons.Material.Filled.Email"
+                    Class="mb-2" />
+                    <MudButton Variant="Variant.Filled"
+                    Color="Color.Primary"
+                    OnClick="UpdateEmail"
+                    StartIcon="@Icons.Material.Filled.Save"
+                    FullWidth="true">
                         Update Email
                     </MudButton>
                 </MudCardContent>
@@ -47,6 +49,20 @@
     protected override async Task OnInitializedAsync()
     {
         var client = Supabase.GetClient();
+
+        // Check if the user is authenticated via cookie
+        var userSession = await JS.InvokeAsync<string>("getCookie", "userSession");
+        var refreshToken = await JS.InvokeAsync<string>("getCookie", "refreshToken"); // Retrieve the refresh token
+
+        if (string.IsNullOrEmpty(userSession) || string.IsNullOrEmpty(refreshToken))
+        {
+            NavigationManager.NavigateTo("/login", true);
+            return;
+        }
+
+        // If the user is authenticated, set the session
+        await client.Auth.SetSession(userSession, refreshToken); // Use the method to set the session
+
         if (client.Auth.CurrentUser == null)
         {
             NavigationManager.NavigateTo("/login", true);
@@ -59,32 +75,59 @@
 
     private async Task UpdateEmail()
     {
-        if(!IsValidEmail(email))
+        try
         {
-            SnackBar.Add("Invalid email format", Severity.Warning);
-            return;
-        }
+            if (!IsEmailValid(email))
+            {
+                SnackBar.Add("Invalid or non-existent email address", Severity.Warning);
+                return;
+            }
 
-        // Use the Supabase code: update the email; a confirmation mail is sent
-        var attrs = new Supabase.Gotrue.UserAttributes { Email = email };
-        var response = await Supabase.GetClient().Auth.Update(attrs);
-        if (response != null)
-        {
-            SnackBar.Add("Confirmation email sent.", Severity.Success);
+            // Use the Supabase code: update the email; a confirmation mail is sent
+            var attrs = new UserAttributes { Email = email };
+            var response = await Supabase.GetClient().Auth.Update(attrs);
+
+            if (response != null)
+            {
+                SnackBar.Add("Confirmation email sent.", Severity.Success);
+            }
+            else
+            {
+                SnackBar.Add($"Update failed: {response}", Severity.Error);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            SnackBar.Add("Update failed. Please try again.", Severity.Error);
+            if (ex.Message.Contains("400"))
+            {
+                SnackBar.Add("Invalid Address", Severity.Warning);
+               
+            }
+			else if (ex.Message.Contains("422"))
+			{
+				SnackBar.Add("A user with this email already exists", Severity.Warning);
+			}
+			else
+            SnackBar.Add($"Update failed: {ex.Message}", Severity.Error);
         }
     }
 
-    private bool IsValidEmail(string email)
+    private bool IsEmailValid(string email)
     {
-        try {
-            var addr = new System.Net.Mail.MailAddress(email);
-            return addr.Address == email;
-        } catch {
-            return false;
+        try
+        {
+            // Set the license if using the Professional version
+            ComponentInfo.SetLicense("YOUR-SERIAL-KEY"); // Replace with your actual serial key or use trial
+
+            // Validate the email address using GemBox
+            MailAddressValidationResult result = MailAddressValidator.Validate(email);
+
+            // Check if the email is valid (syntax, domain, and mailbox)
+            return result.Status != MailAddressValidationStatus.InvalidAddress;
+        }
+        catch (Exception)
+        {
+            return false; // If any error occurs (e.g., network issue), assume invalid
         }
     }
 }

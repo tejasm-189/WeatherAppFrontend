@@ -1,54 +1,115 @@
-﻿@inject SupabaseClient supabase  
-@inject NavigationManager NavigationManager  
+﻿@inject SupabaseClient supabase
+@inject NavigationManager NavigationManager
 @inject IPreferenceService PreferenceService
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject ISnackbar SnackBar
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
 @inherits LayoutComponentBase
+@using System.Text.Json
+@using MudBlazor.Charts
 @* Required *@
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 <MudPopoverProvider />
 
-<MudLayout>  
+<MudLayout>
+    <MudAppBar Color="Color.Primary">
+        <MudText Typo="Typo.h5" Class="ml-2">WeatherApp</MudText>
+        <MudSpacer />
 
-   <MudAppBar Color="Color.Primary">  
-       <MudText Typo="Typo.h5" Class="ml-2">WeatherApp</MudText>  
-       <MudSpacer />  
+        <!-- Dark Mode Toggle Button -->
+        <MudTooltip Text="Toggle Dark Mode">
+            <MudIconButton Icon="@Icons.Material.Filled.DarkMode"
+                           Color="Color.Inherit"
+                           Edge="Edge.End"
+                           OnClick="ToggleDarkMode" />
+        </MudTooltip>
 
-       <!-- Dark Mode Toggle Button -->
-       <MudTooltip Text="Toggle Dark Mode">
-           <MudIconButton Icon="@Icons.Material.Filled.DarkMode" 
-                          Color="Color.Inherit" 
-                          Edge="Edge.End" 
-                          OnClick="ToggleDarkMode" />
-       </MudTooltip>
+        <!-- Notification Icon with Ref -->
+        @if (isAuthenticated)
+        {
+            <MudTooltip Text="Notifications">
+                <MudBadge Content="@unreadNotificationCount" Color="Color.Error" Overlap="true" Class="mr-2">
+                    <MudIconButton @ref="notificationButtonRef"
+                                   Icon="@Icons.Material.Filled.Notifications"
+                                   Color="Color.Inherit"
+                                   Edge="Edge.End"
+                                   OnClick="OpenNotifications" />
+                </MudBadge>
+            </MudTooltip>
+        }
+        else
+        {
+            <MudText>Not authenticated</MudText>
+        }
 
-       @if (isAuthenticated)  
-       {  
-           <MudTooltip Text="Logout">  
-               <MudIconButton Icon="@Icons.Material.Filled.Logout" Edge="Edge.End" Style="color:#e2e1ebff;" OnClick="@Logout" />  
-           </MudTooltip>  
+        <!-- Logout Button -->
+        <MudTooltip Text="Logout">
+            <MudIconButton Icon="@Icons.Material.Filled.Logout"
+                           Edge="Edge.End"
+                           Style="color:#e2e1ebff;"
+                           OnClick="@Logout" />
+        </MudTooltip>
+    </MudAppBar>
 
-       }  
-       else  
-       {  
-           <MudTooltip Text="Sign Up / Login">  
-               <MudIconButton Icon="@Icons.Material.Filled.Login" Edge="Edge.End" Style="color:#e2e1ebff;" OnClick="@Login" />  
-           </MudTooltip>  
-       }  
+    <!-- Notification Popover -->
+    <MudPopover Open="@_popoverOpen"
+                Anchor="@notificationButtonRef"
+                AnchorOrigin="Origin.TopRight"
+                TransformOrigin="Origin.TopRight"
+                RelativePosition="false"
+                Class="pa-4">
+        <MudStack>
+            <MudList T="object" Dense="true" Style="max-height: 300px; overflow-y: auto;">
+                @if (notifications.Any())
+                {
+                    @foreach (var notification in notifications.OrderByDescending(n => n.Timestamp))
+                    {
+                        <MudListItem T="object">
+                            <MudStack>
+                                <MudText Typo="Typo.body2">@notification.Message</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @notification.Timestamp.ToString("MMM dd, HH:mm")
+                                </MudText>
+                                @if (!notification.IsRead)
+                                {
+                                    <MudButton Size="Size.Small"
+                                               Color="Color.Primary"
+                                               OnClick="@(() => MarkAsRead(notification.Id))">
+                                        Mark as Read
+                                    </MudButton>
+                                }
+                            </MudStack>
+                        </MudListItem>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">No notifications available.</MudText>
+                }
+            </MudList>
+            @if (notifications.Any())
+            {
+                <MudButton Color="Color.Secondary"
+                           OnClick="ClearNotifications"
+                           Size="Size.Small"
+                           Variant="Variant.Text">
+                    Clear All
+                </MudButton>
+            }
+        </MudStack>
+    </MudPopover>
 
-   </MudAppBar>
     <MudDrawerContainer Style="height: calc(100vh - 64px); margin-top: 64px; position: relative;">
-
-        <!-- Sidebar Navigation -->
         <MudDrawer @bind-Open="@_open" Fixed="true" Elevation="1" Variant="@DrawerVariant.Mini" OpenMiniOnHover="true" Class="gradient-drawer">
             <MudNavMenu Class="mud-nav-menu-center">
                 <MudNavLink Match="NavLinkMatch.All" Href="/home" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
                 <MudNavLink Match="NavLinkMatch.All" Href="/dashboard" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
                 <MudNavLink Match="NavLinkMatch.All" Href="/favorites" Icon="@Icons.Material.Filled.Favorite">Favorites</MudNavLink>
-
             </MudNavMenu>
             <MudSpacer />
-
             <MudNavMenu>
                 <MudNavLink Href="/about" Icon="@Icons.Material.Filled.Info">About</MudNavLink>
                 <MudNavLink Href="/contact" Icon="@Icons.Material.Filled.ContactSupport">Contact</MudNavLink>
@@ -56,49 +117,389 @@
             </MudNavMenu>
         </MudDrawer>
 
-        <!-- Main Content Area -->  
-       <MudMainContent Style="margin-left: 56px; height: calc(100vh - 64px); padding-top: 0;">  
-           <MudContainer MaxWidth="MaxWidth.ExtraLarge" Style="flex-grow:1; display: flex; flex-direction: column; height: 100%; padding-top: 0;">  
-               @Body  
-           </MudContainer>  
-       </MudMainContent>  
-   </MudDrawerContainer>  
-</MudLayout>  
+        <MudMainContent Style="margin-left: 56px; height: calc(100vh - 64px); padding-top: 0;">
+            <MudContainer MaxWidth="MaxWidth.ExtraLarge" Style="flex-grow:1; display: flex; flex-direction: column; height: 100%; padding-top: 0;">
+                @Body
+            </MudContainer>
+        </MudMainContent>
+    </MudDrawerContainer>
+</MudLayout>
 
-@code {  
-   private bool _open = false;  
-   private bool _isDarkMode = false;  
+@code {
+    private bool _open = false;
+    private bool _isDarkMode = false;
+    private bool isAuthenticated = false;
+    private List<Notification> notifications = new();
+    private int unreadNotificationCount;
+    private string apiBase = "https://weatherappbackend-2ehx.onrender.com/api";
+    private string userId = "";
+    private bool _popoverOpen = false;
+    private bool _authStateChanged = false;
+    private MudIconButton notificationButtonRef;
 
-   private bool isAuthenticated = false;  
+    public class Notification
+    {
+        public int Id { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+        public bool IsRead { get; set; }
+        public string City { get; set; } = string.Empty; // Added to track city
+        public string ConditionType { get; set; } = string.Empty; // "Heat" or "Cold"
+    }
 
-   protected override async Task OnInitializedAsync()  
-   {  
-       var client = supabase.GetClient();  
-       var sessionResponse = client.Auth.CurrentSession;  
-       var userResponse = client.Auth.CurrentUser;  
+    protected override async Task OnInitializedAsync()
+    {
+        Console.WriteLine("MainLayout initialized");
+        await CheckAuthenticationState();
+        _isDarkMode = await PreferenceService.GetDarkModePreference();
+    }
 
-       isAuthenticated = sessionResponse?.User != null;  
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var client = supabase.GetClient();
+            client.Auth.AddStateChangedListener((sender, state) =>
+            {
+                Console.WriteLine($"Auth state changed: {state}");
+                _authStateChanged = true;
+                CheckAuthenticationState().GetAwaiter().GetResult();
+                StateHasChanged();
+            });
+        }
 
-       // Load dark mode preference  
-       _isDarkMode = await PreferenceService.GetDarkModePreference();  
-   }  
+        if (_authStateChanged)
+        {
+            Console.WriteLine("Re-checking auth state due to change");
+            await CheckAuthenticationState();
+            _authStateChanged = false;
+        }
+    }
 
-   private async Task ToggleDarkMode()  
-   {  
-       _isDarkMode = !_isDarkMode;  
-       await PreferenceService.SetDarkModePreference(_isDarkMode);  
-   }  
+    private async Task CheckAuthenticationState()
+    {
+        var client = supabase.GetClient();
+        var sessionResponse = client.Auth.CurrentSession;
 
-   private async Task Logout()  
-   {  
-       var client = supabase.GetClient();  
-       await client.Auth.SignOut();  
-       isAuthenticated = false;  
-       NavigationManager.NavigateTo("/root");  
-   }  
+        bool newAuthState = sessionResponse?.User != null;
+        if (newAuthState != isAuthenticated)
+        {
+            isAuthenticated = newAuthState;
+            if (isAuthenticated)
+            {
+                userId = client.Auth.CurrentUser.Id;
+                Console.WriteLine($"User authenticated: {userId}");
+                await LoadNotificationsFromStorage();
+                await FetchAndGenerateNotifications();
+            }
+            else
+            {
+                Console.WriteLine("No authenticated user detected.");
+                userId = "";
+                notifications.Clear();
+                unreadNotificationCount = 0;
+            }
+            StateHasChanged();
+        }
+    }
 
-   private void Login()  
-   {  
-       NavigationManager.NavigateTo("/login");  
-   }  
+    private async Task LoadNotificationsFromStorage()
+    {
+        try
+        {
+            var storedNotifications = await LocalStorage.GetItemAsync<List<Notification>>($"notifications_{userId}");
+            if (storedNotifications != null)
+            {
+                notifications = storedNotifications;
+                unreadNotificationCount = notifications.Count(n => !n.IsRead);
+                Console.WriteLine($"Loaded {notifications.Count} notifications from storage.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading notifications from storage: {ex.Message}");
+        }
+    }
+
+    private async Task SaveNotificationsToStorage()
+    {
+        try
+        {
+            await LocalStorage.SetItemAsync($"notifications_{userId}", notifications);
+            unreadNotificationCount = notifications.Count(n => !n.IsRead);
+            Console.WriteLine($"Saved {notifications.Count} notifications to storage, Unread: {unreadNotificationCount}");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving notifications to storage: {ex.Message}");
+        }
+    }
+
+    private async Task FetchAndGenerateNotifications()
+    {
+        try
+        {
+            Console.WriteLine("Fetching favorite cities...");
+            var favoriteCities = await Http.GetFromJsonAsync<List<FavoriteCity>>($"{apiBase}/favorites/{userId}");
+            if (favoriteCities == null || !favoriteCities.Any())
+            {
+                Console.WriteLine("No favorite cities found for user.");
+                return;
+            }
+            Console.WriteLine($"Found {favoriteCities.Count} favorite cities: {string.Join(", ", favoriteCities.Select(c => c.City))}");
+
+            int nextId = notifications.Any() ? notifications.Max(n => n.Id) + 1 : 1;
+
+            foreach (var city in favoriteCities)
+            {
+                Console.WriteLine($"Fetching weather data for {city.City}...");
+                var weatherResponse = await Http.GetFromJsonAsync<WeatherApiResponse>($"{apiBase}/weather/{city.City}");
+                if (weatherResponse != null && weatherResponse.List.Any())
+                {
+                    Console.WriteLine($"Received {weatherResponse.List.Count} forecast items for {city.City}");
+                    var dailyTemps = ProcessDailyTemperatures(weatherResponse.List);
+                    Console.WriteLine($"Processed {dailyTemps.Count} daily temperatures for {city.City}");
+                    foreach (var temp in dailyTemps)
+                    {
+                        Console.WriteLine($"Date: {temp.Date:yyyy-MM-dd}, MaxTemp: {temp.MaxTemp:F1}°C, MinTemp: {temp.MinTemp:F1}°C");
+                    }
+
+                    var extremeConditions = CheckExtremeConditions(city.City, dailyTemps);
+                    foreach (var condition in extremeConditions)
+                    {
+                        var parts = condition.Split(new[] { " in ", ": " }, StringSplitOptions.None);
+                        var conditionType = parts[0].Contains("heat") ? "Heat" : "Cold";
+                        var cityName = parts[1];
+
+                        // Check for existing notification for this city and condition type
+                        var existing = notifications.FirstOrDefault(n => n.City == cityName && n.ConditionType == conditionType);
+                        if (existing != null)
+                        {
+                            // Update existing notification
+                            Console.WriteLine($"Updating existing notification: {existing.Message} -> {condition}");
+                            existing.Message = condition;
+                            existing.Timestamp = DateTime.UtcNow;
+                            existing.IsRead = false; // Reset to unread for new data
+                        }
+                        else
+                        {
+                            // Add new notification
+                            notifications.Add(new Notification
+                                {
+                                    Id = nextId++,
+                                    Message = condition,
+                                    Timestamp = DateTime.UtcNow,
+                                    IsRead = false,
+                                    City = cityName,
+                                    ConditionType = conditionType
+                                });
+                            Console.WriteLine($"Added new notification: {condition}");
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"No weather data received for {city.City}");
+                }
+            }
+            await SaveNotificationsToStorage();
+        }
+        catch (Exception ex)
+        {
+            SnackBar.Add($"Error fetching weather data: {ex.Message}", Severity.Error);
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+    }
+
+    private List<DailyTemperature> ProcessDailyTemperatures(List<ForecastItem> forecastItems)
+    {
+        Console.WriteLine("Processing daily temperatures...");
+        var processedItems = forecastItems.Select(x => new
+        {
+            DateStr = !string.IsNullOrEmpty(x.DtTxt)
+                ? x.DtTxt.Substring(0, 10)
+                : DateTimeOffset.FromUnixTimeSeconds(x.Dt).UtcDateTime.ToString("yyyy-MM-dd"),
+            TempMax = x.Main.TempMax != 0 ? x.Main.TempMax : x.Main.Temp,
+            TempMin = x.Main.TempMin != 0 ? x.Main.TempMin : x.Main.Temp
+        }).ToList();
+
+        Console.WriteLine($"Processed {processedItems.Count} forecast items.");
+        foreach (var item in processedItems.Take(3))
+        {
+            Console.WriteLine($"Forecast: Date={item.DateStr}, MaxTemp={item.TempMax:F1}K, MinTemp={item.TempMin:F1}K");
+        }
+
+        var groupedData = processedItems.GroupBy(x => x.DateStr).ToList();
+        var today = DateTime.Now.ToString("yyyy-MM-dd");
+        Console.WriteLine($"Filtering for today: {today}");
+
+        var dailyTemps = groupedData
+            .Where(g => g.Key == today)
+            .Select(group => new DailyTemperature
+                {
+                    Date = DateTime.Parse(group.Key),
+                    MaxTemp = Math.Round(group.Max(x => x.TempMax - 273.15), 1),
+                    MinTemp = Math.Round(group.Min(x => x.TempMin - 273.15), 1)
+                })
+            .ToList();
+
+        if (!dailyTemps.Any())
+        {
+            Console.WriteLine("No temperature data for today. Using first available day as fallback...");
+            var firstDay = groupedData.FirstOrDefault();
+            if (firstDay != null)
+            {
+                dailyTemps.Add(new DailyTemperature
+                    {
+                        Date = DateTime.Parse(firstDay.Key),
+                        MaxTemp = Math.Round(firstDay.Max(x => x.TempMax - 273.15), 1),
+                        MinTemp = Math.Round(firstDay.Min(x => x.TempMin - 273.15), 1)
+                    });
+            }
+        }
+
+        return dailyTemps;
+    }
+
+    private List<string> CheckExtremeConditions(string cityName, List<DailyTemperature> dailyTemps)
+    {
+        var conditions = new List<string>();
+        foreach (var temp in dailyTemps)
+        {
+            Console.WriteLine($"Checking extremes for {cityName}: Max={temp.MaxTemp:F1}°C, Min={temp.MinTemp:F1}°C");
+            if (temp.MaxTemp > 30)
+                conditions.Add($"Extreme heat in {cityName}: {temp.MaxTemp:F1}°C");
+            if (temp.MinTemp < 7)
+                conditions.Add($"Extreme cold in {cityName}: {temp.MinTemp:F1}°C");
+        }
+        return conditions;
+    }
+
+    private void OpenNotifications()
+    {
+        _popoverOpen = !_popoverOpen;
+    }
+
+    private async Task MarkAsRead(int notificationId)
+    {
+        var notification = notifications.FirstOrDefault(n => n.Id == notificationId);
+        if (notification != null)
+        {
+            notification.IsRead = true;
+            await SaveNotificationsToStorage();
+            SnackBar.Add("Notification marked as read.", Severity.Success);
+        }
+    }
+
+    private async Task ClearNotifications()
+    {
+        notifications.Clear();
+        unreadNotificationCount = 0;
+        await SaveNotificationsToStorage();
+        SnackBar.Add("All notifications cleared.", Severity.Success);
+    }
+
+    private async Task ToggleDarkMode()
+    {
+        _isDarkMode = !_isDarkMode;
+        await PreferenceService.SetDarkModePreference(_isDarkMode);
+    }
+
+    private async Task Logout()
+    {
+        var client = supabase.GetClient();
+        try
+        {
+            await client.Auth.SignOut();
+            Console.WriteLine("SignOut successful");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SignOut failed: {ex.Message}");
+        }
+        await JS.InvokeVoidAsync("setCookie", "userSession", "", -1);
+        await JS.InvokeVoidAsync("setCookie", "refreshToken", "", -1);
+        await LocalStorage.ClearAsync();
+        Console.WriteLine("Local storage cleared");
+        isAuthenticated = false;
+        userId = "";
+        notifications.Clear();
+        unreadNotificationCount = 0;
+        NavigationManager.NavigateTo("/login", forceLoad: true);
+    }
+
+    // Classes reused from Dashboard.razor
+    public class WeatherApiResponse
+    {
+        public List<ForecastItem> List { get; set; } = new();
+        public CityInfo City { get; set; } = new();
+    }
+
+    public class CityInfo
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Country { get; set; } = string.Empty;
+        public long Sunrise { get; set; }
+        public long Sunset { get; set; }
+    }
+
+    public class ForecastItem
+    {
+        public long Dt { get; set; }
+        public MainInfo Main { get; set; } = new();
+        public List<WeatherInfo> Weather { get; set; } = new();
+        public WindInfo Wind { get; set; } = new();
+        public int Visibility { get; set; }
+        public string DtTxt { get; set; } = string.Empty;
+        public RainInfo? Rain { get; set; }
+        public SnowInfo? Snow { get; set; }
+    }
+
+    public class MainInfo
+    {
+        public double Temp { get; set; }
+        public int Humidity { get; set; }
+        public double FeelsLike { get; set; }
+        public double TempMin { get; set; }
+        public double TempMax { get; set; }
+        public int Pressure { get; set; }
+        public int SeaLevel { get; set; }
+        public int GrndLevel { get; set; }
+    }
+
+    public class WeatherInfo
+    {
+        public string Description { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+    }
+
+    public class WindInfo
+    {
+        public double Speed { get; set; }
+        public double Gust { get; set; }
+    }
+
+    public class RainInfo
+    {
+        public double ThreeHour { get; set; }
+    }
+
+    public class SnowInfo
+    {
+        public double ThreeHour { get; set; }
+    }
+
+    public class FavoriteCity
+    {
+        public string UserId { get; set; }
+        public string City { get; set; }
+    }
+
+    public class DailyTemperature
+    {
+        public DateTime Date { get; set; }
+        public double MaxTemp { get; set; }
+        public double MinTemp { get; set; }
+    }
 }

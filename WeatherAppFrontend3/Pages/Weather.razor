@@ -82,7 +82,7 @@ else
 
         try
         {
-            string api = "https://localhost:7281/api";
+            string api = "https://weatherappbackend-2ehx.onrender.com/api";
             weatherData = await Http.GetFromJsonAsync<WeatherForecast>($"{api}/weather/{city}");
         }
         catch (Exception ex)

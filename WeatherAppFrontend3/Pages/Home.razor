@@ -134,7 +134,7 @@
     {
         try
         {
-            var response = await Http.GetFromJsonAsync<WeatherApiResponse>($"https://localhost:7281/api/weather/{searchQuery}");
+            var response = await Http.GetFromJsonAsync<WeatherApiResponse>($"https://weatherappbackend-2ehx.onrender.com/api/weather/{searchQuery}");
             if (response != null && response.List.Any())
             {
                 var current = response.List.First();
@@ -180,6 +180,7 @@
     }
 
     public class CurrentWeather
+
     {
         public string CityName { get; set; } = string.Empty;
         public double Temperature { get; set; }

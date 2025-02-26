@@ -2,6 +2,7 @@
 @inject NavigationManager Nav
 @inject SupabaseClient supabase
 @using MudBlazor
+@inject IJSRuntime JSRuntime
 
 <div class="login-background">
     <div class="login-overlay">
@@ -132,15 +133,26 @@
     private string? errorMessage;
     private bool isLogin = true;
 
+    // Define the variables
+    private bool loginSuccessful = false; // Indicates if the login was successful
+    private string userSessionData = ""; // Holds the session data to be stored in the cookie
+
     private async Task LoginAs()
     {
         try
         {
             var client = supabase.GetClient();
-            var session = await client.Auth.SignIn(email, password);
+            var session = await client.Auth.SignIn(email, password); // This should return the session object
             if (session != null)
             {
-                Nav.NavigateTo("/dashboard");  // Changed from /weather to /dashboard
+                loginSuccessful = true; // Set to true if login is successful
+                userSessionData = session.AccessToken; // Store the access token
+
+                // Set cookies for both access and refresh tokens
+                await JSRuntime.InvokeVoidAsync("setCookie", "userSession", session.AccessToken, 7); // Expires in 7 days
+                await JSRuntime.InvokeVoidAsync("setCookie", "refreshToken", session.RefreshToken, 7); // Expires in 7 days
+
+                Nav.NavigateTo("/dashboard");  // Navigate to dashboard
             }
         }
         catch (Exception ex)

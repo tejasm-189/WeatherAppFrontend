@@ -6,6 +6,8 @@
 @using System.Linq
 @inject SupabaseClient Supabase
 @inject ISnackbar SnackBar
+@inject IJSRuntime JS
+@using Supabase.Gotrue;
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="dashboard-container pa-2">
     <!-- Search Section -->
@@ -284,7 +286,7 @@
     private List<ChartSeries> _windSeries = new();
     private string[] _dateLabels = new string[5];
     private string userId = "user123"; // Replace with actual user authentication ID
-    private string apiBase = "https://localhost:7281/api";
+    private string apiBase = "https://weatherappbackend-2ehx.onrender.com/api";
     [Inject] private ISnackbar Snackbar { get; set; }
 
     // New variables for today's 3-hourly forecast
@@ -373,6 +375,20 @@
     protected override async Task OnInitializedAsync()
     {
         var client = Supabase.GetClient();
+        
+        // Check if the user is authenticated via cookie
+        var userSession = await JS.InvokeAsync<string>("getCookie", "userSession");
+        var refreshToken = await JS.InvokeAsync<string>("getCookie", "refreshToken"); // Retrieve the refresh token
+
+        if (string.IsNullOrEmpty(userSession) || string.IsNullOrEmpty(refreshToken))
+        {
+            NavigationManager.NavigateTo("/login", true);
+            return;
+        }
+
+        // If the user is authenticated, set the session
+        await client.Auth.SetSession(userSession, refreshToken); // Use the method to set the session
+
         if (client.Auth.CurrentUser == null)
         {
             NavigationManager.NavigateTo("/login", true);
@@ -394,7 +410,7 @@
     {
         try
         {
-            var response = await Http.GetFromJsonAsync<WeatherApiResponse>($"https://localhost:7281/api/weather/{searchQuery}");
+            var response = await Http.GetFromJsonAsync<WeatherApiResponse>($"https://weatherappbackend-2ehx.onrender.com/api/weather/{searchQuery}");
             if (response != null && response.List.Any())
             {
                 // Debug: Log the number of items received
@@ -444,7 +460,7 @@
                 Console.WriteLine("Visibility: " + currentWeather?.Visibility);
             }
             else
-            {
+            { 
                 Console.WriteLine("No data received from API");
             }
         }
